@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1773823209378,
+      "tag": "0000_previous_sway",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1773831734801,
+      "tag": "0001_clear_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1774925681292,
+      "tag": "0002_bizarre_lionheart",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `project_members` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `projectId` varchar(64) NOT NULL,\n  `name` varchar(100) NOT NULL,\n  `passwordHash` varchar(255) NOT NULL,\n  `role` enum('viewer','editor') NOT NULL DEFAULT 'viewer',\n  `createdAt` timestamp NOT NULL DEFAULT (now()),\n  `updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n  CONSTRAINT `project_members_id` PRIMARY KEY(`id`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user er1pyZbjGqGbKSY.16ad32df7869 --database QShAA9iq3LNTdEBMskkGN8 --execute CREATE TABLE IF NOT EXISTS `project_members` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `projectId` varchar(64) NOT NULL,\n  `name` varchar(100) NOT NULL,\n  `passwordHash` varchar(255) NOT NULL,\n  `role` enum('viewer','editor') NOT NULL DEFAULT 'viewer',\n  `createdAt` timestamp NOT NULL DEFAULT (now()),\n  `updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n  CONSTRAINT `project_members_id` PRIMARY KEY(`id`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1594
+}
