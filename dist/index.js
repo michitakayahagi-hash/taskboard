@@ -17,7 +17,7 @@ import { eq, and, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 
 // drizzle/schema.ts
-import { int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 var users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
@@ -77,10 +77,24 @@ var projectMembers = mysqlTable("project_members", {
   id: int("id").autoincrement().primaryKey(),
   projectId: varchar("projectId", { length: 64 }).notNull(),
   name: varchar("name", { length: 100 }).notNull(),
+  email: varchar("email", { length: 320 }),
   passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
   role: mysqlEnum("role", ["viewer", "editor"]).notNull().default("viewer"),
+  isAdmin: boolean("isAdmin").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+});
+var invitations = mysqlTable("invitations", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: varchar("projectId", { length: 64 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  token: varchar("token", { length: 128 }).notNull().unique(),
+  role: mysqlEnum("role", ["viewer", "editor"]).notNull().default("viewer"),
+  isAdmin: boolean("isAdmin").notNull().default(false),
+  status: mysqlEnum("status", ["pending", "accepted", "expired"]).notNull().default("pending"),
+  invitedBy: int("invitedBy"),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull()
 });
 
 // server/_core/env.ts
@@ -190,6 +204,8 @@ async function deleteProject(id) {
   }
   await db.delete(tasks).where(eq(tasks.projectId, id));
   await db.delete(columns).where(eq(columns.projectId, id));
+  await db.delete(projectMembers).where(eq(projectMembers.projectId, id));
+  await db.delete(invitations).where(eq(invitations.projectId, id));
   await db.delete(projects).where(eq(projects.id, id));
 }
 async function getColumnsByProject(projectId) {
@@ -283,6 +299,12 @@ async function getMemberByNameAndProject(projectId, name) {
   const result = await db.select().from(projectMembers).where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.name, name))).limit(1);
   return result.length > 0 ? result[0] : null;
 }
+async function getMemberByEmailAndProject(projectId, email) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(projectMembers).where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.email, email))).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
 async function createProjectMember(data) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
@@ -303,6 +325,32 @@ async function hasAnyMember(projectId) {
   if (!db) return false;
   const result = await db.select({ id: projectMembers.id }).from(projectMembers).where(eq(projectMembers.projectId, projectId)).limit(1);
   return result.length > 0;
+}
+async function createInvitation(data) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.insert(invitations).values(data);
+}
+async function getInvitationByToken(token) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(invitations).where(eq(invitations.token, token)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+async function getInvitationsByProject(projectId) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(invitations).where(eq(invitations.projectId, projectId)).orderBy(asc(invitations.createdAt));
+}
+async function updateInvitation(id, data) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(invitations).set(data).where(eq(invitations.id, id));
+}
+async function deleteInvitation(id) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(invitations).where(eq(invitations.id, id));
 }
 
 // server/_core/cookies.ts
@@ -737,6 +785,62 @@ var systemRouter = router({
 import { z as z2 } from "zod";
 import bcrypt from "bcryptjs";
 import { TRPCError as TRPCError3 } from "@trpc/server";
+import { randomUUID } from "crypto";
+
+// server/_core/mailer.ts
+import nodemailer from "nodemailer";
+function getTransporter() {
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT || "587");
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (!host || !user || !pass) {
+    console.warn("[Mailer] SMTP settings not configured. Emails will not be sent.");
+    return null;
+  }
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass }
+  });
+}
+async function sendInvitationEmail({
+  to,
+  projectName,
+  inviteUrl,
+  inviterName
+}) {
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.warn(`[Mailer] Would send invite to ${to} but SMTP not configured.`);
+    return false;
+  }
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  await transporter.sendMail({
+    from,
+    to,
+    subject: `\u3010TaskBoard\u3011${projectName} \u3078\u62DB\u5F85\u3055\u308C\u307E\u3057\u305F`,
+    html: `
+      <div style="font-family:'Noto Sans JP',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#f8f7ff;border-radius:16px;">
+        <h2 style="color:#6366f1;font-size:20px;margin:0 0 12px;">\u{1F4CB} TaskBoard \u62DB\u5F85</h2>
+        <p style="color:#1e1b4b;font-size:14px;line-height:1.7;margin:0 0 16px;">
+          <strong>${inviterName}</strong> \u3055\u3093\u304B\u3089 <strong>\u300C${projectName}\u300D</strong> \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3078\u306E\u62DB\u5F85\u304C\u5C4A\u3044\u3066\u3044\u307E\u3059\u3002
+        </p>
+        <a href="${inviteUrl}"
+           style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:12px 28px;border-radius:10px;font-weight:700;font-size:14px;box-shadow:0 4px 12px rgba(99,102,241,.35);">
+          \u62DB\u5F85\u3092\u627F\u8A8D\u3057\u3066\u53C2\u52A0\u3059\u308B
+        </a>
+        <p style="color:#94a3b8;font-size:11px;margin:20px 0 0;">
+          \u3053\u306E\u30EA\u30F3\u30AF\u306F72\u6642\u9593\u6709\u52B9\u3067\u3059\u3002\u5FC3\u5F53\u305F\u308A\u304C\u306A\u3044\u5834\u5408\u306F\u7121\u8996\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+        </p>
+      </div>
+    `
+  });
+  return true;
+}
+
+// server/routers.ts
 var PROJECT_SESSION_COOKIE = "tb_proj_session";
 var projectSessions = /* @__PURE__ */ new Map();
 function genToken() {
@@ -1079,7 +1183,7 @@ var appRouter = router({
     getSession: publicProcedure.input(z2.object({ projectId: z2.string() })).query(async ({ input, ctx }) => {
       const session = getProjectSession(ctx.req, input.projectId);
       if (!session) return null;
-      return { name: session.name, role: session.role };
+      return { name: session.name, role: session.role, isAdmin: session.isAdmin };
     }),
     // Login to a restricted project
     login: publicProcedure.input(z2.object({ projectId: z2.string(), name: z2.string(), password: z2.string() })).mutation(async ({ input, ctx }) => {
@@ -1089,10 +1193,10 @@ var appRouter = router({
       if (!ok) throw new TRPCError3({ code: "UNAUTHORIZED", message: "\u540D\u524D\u307E\u305F\u306F\u30D1\u30B9\u30EF\u30FC\u30C9\u304C\u6B63\u3057\u304F\u3042\u308A\u307E\u305B\u3093" });
       const token = genToken();
       const exp = Date.now() + 7 * 24 * 60 * 60 * 1e3;
-      projectSessions.set(token, { projectId: input.projectId, memberId: member.id, role: member.role, name: member.name, exp });
+      projectSessions.set(token, { projectId: input.projectId, memberId: member.id, role: member.role, name: member.name, isAdmin: member.isAdmin, exp });
       const res = ctx.res;
       res.cookie(PROJECT_SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1e3 });
-      return { success: true, name: member.name, role: member.role };
+      return { success: true, name: member.name, role: member.role, isAdmin: member.isAdmin };
     }),
     // Logout from a project
     logout: publicProcedure.input(z2.object({ projectId: z2.string() })).mutation(async ({ ctx }) => {
@@ -1106,27 +1210,141 @@ var appRouter = router({
     // List members for a project (for settings screen)
     listMembers: publicProcedure.input(z2.object({ projectId: z2.string() })).query(async ({ input }) => {
       const members = await getMembersByProject(input.projectId);
-      return members.map((m) => ({ id: m.id, name: m.name, role: m.role }));
+      return members.map((m) => ({ id: m.id, name: m.name, email: m.email, role: m.role, isAdmin: m.isAdmin }));
     }),
     // Add a member to a project
-    addMember: publicProcedure.input(z2.object({ projectId: z2.string(), name: z2.string(), password: z2.string(), role: z2.enum(["viewer", "editor"]) })).mutation(async ({ input }) => {
+    addMember: publicProcedure.input(z2.object({ projectId: z2.string(), name: z2.string(), password: z2.string(), role: z2.enum(["viewer", "editor"]), isAdmin: z2.boolean().optional() })).mutation(async ({ input }) => {
       const existing = await getMemberByNameAndProject(input.projectId, input.name);
       if (existing) throw new TRPCError3({ code: "CONFLICT", message: "\u540C\u3058\u540D\u524D\u306E\u30E1\u30F3\u30D0\u30FC\u304C\u3059\u3067\u306B\u5B58\u5728\u3057\u307E\u3059" });
       const passwordHash = await bcrypt.hash(input.password, 10);
-      await createProjectMember({ projectId: input.projectId, name: input.name, passwordHash, role: input.role });
+      await createProjectMember({ projectId: input.projectId, name: input.name, passwordHash, role: input.role, isAdmin: input.isAdmin ?? false });
       return { success: true };
     }),
     // Update a member's role or password
-    updateMember: publicProcedure.input(z2.object({ id: z2.number(), role: z2.enum(["viewer", "editor"]).optional(), password: z2.string().optional() })).mutation(async ({ input }) => {
+    updateMember: publicProcedure.input(z2.object({ id: z2.number(), role: z2.enum(["viewer", "editor"]).optional(), password: z2.string().optional(), isAdmin: z2.boolean().optional() })).mutation(async ({ input }) => {
       const update = {};
       if (input.role) update.role = input.role;
       if (input.password) update.passwordHash = await bcrypt.hash(input.password, 10);
+      if (input.isAdmin !== void 0) update.isAdmin = input.isAdmin;
       await updateProjectMember(input.id, update);
       return { success: true };
     }),
     // Remove a member from a project
     removeMember: publicProcedure.input(z2.object({ id: z2.number() })).mutation(async ({ input }) => {
       await deleteProjectMember(input.id);
+      return { success: true };
+    }),
+    // ─── Invitation endpoints ───────────────────────────────────────────
+    // Send invitation email
+    sendInvite: publicProcedure.input(z2.object({
+      projectId: z2.string(),
+      email: z2.string().email(),
+      role: z2.enum(["viewer", "editor"]),
+      isAdmin: z2.boolean().optional(),
+      inviterName: z2.string().optional()
+    })).mutation(async ({ input, ctx }) => {
+      const session = getProjectSession(ctx.req, input.projectId);
+      const hasMembers = await hasAnyMember(input.projectId);
+      if (hasMembers && (!session || !session.isAdmin)) {
+        throw new TRPCError3({ code: "FORBIDDEN", message: "\u62DB\u5F85\u306F\u7BA1\u7406\u8005\u306E\u307F\u5B9F\u884C\u3067\u304D\u307E\u3059" });
+      }
+      const existingMember = await getMemberByEmailAndProject(input.projectId, input.email);
+      if (existingMember) throw new TRPCError3({ code: "CONFLICT", message: "\u3053\u306E\u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u306F\u3059\u3067\u306B\u30E1\u30F3\u30D0\u30FC\u3067\u3059" });
+      const projects2 = await getAllProjects();
+      const project = projects2.find((p) => p.id === input.projectId);
+      const projectName = project?.name ?? "\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8";
+      const token = randomUUID();
+      const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1e3);
+      await createInvitation({
+        projectId: input.projectId,
+        email: input.email,
+        token,
+        role: input.role,
+        isAdmin: input.isAdmin ?? false,
+        status: "pending",
+        invitedBy: session?.memberId ?? null,
+        expiresAt
+      });
+      const baseUrl = process.env.APP_URL || `http://localhost:${process.env.PORT || 3100}`;
+      const inviteUrl = `${baseUrl}/invite/${token}`;
+      const inviterName = input.inviterName || session?.name || "\u7BA1\u7406\u8005";
+      const sent = await sendInvitationEmail({ to: input.email, projectName, inviteUrl, inviterName });
+      return { success: true, emailSent: sent, inviteUrl };
+    }),
+    // Get invitation info by token (for accept page)
+    getInvite: publicProcedure.input(z2.object({ token: z2.string() })).query(async ({ input }) => {
+      const inv = await getInvitationByToken(input.token);
+      if (!inv) throw new TRPCError3({ code: "NOT_FOUND", message: "\u62DB\u5F85\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093" });
+      if (inv.status !== "pending") throw new TRPCError3({ code: "BAD_REQUEST", message: "\u3053\u306E\u62DB\u5F85\u306F\u3059\u3067\u306B\u4F7F\u7528\u6E08\u307F\u304B\u671F\u9650\u5207\u308C\u3067\u3059" });
+      if (/* @__PURE__ */ new Date() > inv.expiresAt) {
+        await updateInvitation(inv.id, { status: "expired" });
+        throw new TRPCError3({ code: "BAD_REQUEST", message: "\u62DB\u5F85\u30EA\u30F3\u30AF\u306E\u6709\u52B9\u671F\u9650\u304C\u5207\u308C\u3066\u3044\u307E\u3059" });
+      }
+      const projects2 = await getAllProjects();
+      const project = projects2.find((p) => p.id === inv.projectId);
+      return {
+        id: inv.id,
+        projectId: inv.projectId,
+        projectName: project?.name ?? "\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8",
+        email: inv.email,
+        role: inv.role,
+        isAdmin: inv.isAdmin
+      };
+    }),
+    // Accept invitation (register with name + password)
+    acceptInvite: publicProcedure.input(z2.object({
+      token: z2.string(),
+      name: z2.string().min(1),
+      password: z2.string().min(6)
+    })).mutation(async ({ input, ctx }) => {
+      const inv = await getInvitationByToken(input.token);
+      if (!inv) throw new TRPCError3({ code: "NOT_FOUND", message: "\u62DB\u5F85\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093" });
+      if (inv.status !== "pending") throw new TRPCError3({ code: "BAD_REQUEST", message: "\u3053\u306E\u62DB\u5F85\u306F\u3059\u3067\u306B\u4F7F\u7528\u6E08\u307F\u304B\u671F\u9650\u5207\u308C\u3067\u3059" });
+      if (/* @__PURE__ */ new Date() > inv.expiresAt) {
+        await updateInvitation(inv.id, { status: "expired" });
+        throw new TRPCError3({ code: "BAD_REQUEST", message: "\u62DB\u5F85\u30EA\u30F3\u30AF\u306E\u6709\u52B9\u671F\u9650\u304C\u5207\u308C\u3066\u3044\u307E\u3059" });
+      }
+      const existingName = await getMemberByNameAndProject(inv.projectId, input.name);
+      if (existingName) throw new TRPCError3({ code: "CONFLICT", message: "\u3053\u306E\u540D\u524D\u306F\u3059\u3067\u306B\u4F7F\u7528\u3055\u308C\u3066\u3044\u307E\u3059" });
+      const passwordHash = await bcrypt.hash(input.password, 10);
+      await createProjectMember({
+        projectId: inv.projectId,
+        name: input.name,
+        email: inv.email,
+        passwordHash,
+        role: inv.role,
+        isAdmin: inv.isAdmin
+      });
+      await updateInvitation(inv.id, { status: "accepted" });
+      const token = genToken();
+      const exp = Date.now() + 7 * 24 * 60 * 60 * 1e3;
+      const members = await getMembersByProject(inv.projectId);
+      const newMember = members.find((m) => m.name === input.name);
+      if (newMember) {
+        projectSessions.set(token, { projectId: inv.projectId, memberId: newMember.id, role: newMember.role, name: newMember.name, isAdmin: newMember.isAdmin, exp });
+        const res = ctx.res;
+        res.cookie(PROJECT_SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1e3 });
+      }
+      return { success: true, projectId: inv.projectId, name: input.name, role: inv.role, isAdmin: inv.isAdmin };
+    }),
+    // List invitations for a project
+    listInvitations: publicProcedure.input(z2.object({ projectId: z2.string() })).query(async ({ input, ctx }) => {
+      const session = getProjectSession(ctx.req, input.projectId);
+      const hasMembers = await hasAnyMember(input.projectId);
+      if (hasMembers && (!session || !session.isAdmin)) {
+        throw new TRPCError3({ code: "FORBIDDEN", message: "\u7BA1\u7406\u8005\u306E\u307F\u95B2\u89A7\u3067\u304D\u307E\u3059" });
+      }
+      const invs = await getInvitationsByProject(input.projectId);
+      return invs.map((i) => ({ id: i.id, email: i.email, role: i.role, isAdmin: i.isAdmin, status: i.status, expiresAt: i.expiresAt }));
+    }),
+    // Revoke an invitation
+    revokeInvite: publicProcedure.input(z2.object({ id: z2.number(), projectId: z2.string() })).mutation(async ({ input, ctx }) => {
+      const session = getProjectSession(ctx.req, input.projectId);
+      const hasMembers = await hasAnyMember(input.projectId);
+      if (hasMembers && (!session || !session.isAdmin)) {
+        throw new TRPCError3({ code: "FORBIDDEN", message: "\u7BA1\u7406\u8005\u306E\u307F\u5B9F\u884C\u3067\u304D\u307E\u3059" });
+      }
+      await deleteInvitation(input.id);
       return { success: true };
     })
   })

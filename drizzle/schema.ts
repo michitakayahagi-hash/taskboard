@@ -1,4 +1,4 @@
-import { int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -99,19 +99,42 @@ export type InsertSetting = typeof settings.$inferInsert;
 
 /**
  * Project members table (per-project access control)
- * - role "viewer": read-only access
- * - role "editor": full edit access
+ * - isAdmin true: admin role (can invite members)
+ * - isAdmin false: general member
  * Password is stored as bcrypt hash.
  */
 export const projectMembers = mysqlTable("project_members", {
   id: int("id").autoincrement().primaryKey(),
   projectId: varchar("projectId", { length: 64 }).notNull(),
   name: varchar("name", { length: 100 }).notNull(),
+  email: varchar("email", { length: 320 }),
   passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
   role: mysqlEnum("role", ["viewer", "editor"]).notNull().default("viewer"),
+  isAdmin: boolean("isAdmin").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type ProjectMember = typeof projectMembers.$inferSelect;
 export type InsertProjectMember = typeof projectMembers.$inferInsert;
+
+/**
+ * Invitations table
+ * - token: unique invite token (UUID)
+ * - status: pending / accepted / expired
+ */
+export const invitations = mysqlTable("invitations", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: varchar("projectId", { length: 64 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  token: varchar("token", { length: 128 }).notNull().unique(),
+  role: mysqlEnum("role", ["viewer", "editor"]).notNull().default("viewer"),
+  isAdmin: boolean("isAdmin").notNull().default(false),
+  status: mysqlEnum("status", ["pending", "accepted", "expired"]).notNull().default("pending"),
+  invitedBy: int("invitedBy"),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Invitation = typeof invitations.$inferSelect;
+export type InsertInvitation = typeof invitations.$inferInsert;

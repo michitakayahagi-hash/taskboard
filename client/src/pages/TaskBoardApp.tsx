@@ -470,8 +470,9 @@ function AddProjectModal({ onClose, onSave, existingCount }: { onClose: () => vo
 }
 
 // ─── SettingsModal ────────────────────────────────────────────────────────────
-function SettingsModal({ webhookUrl, members, memberIds, projectId, onSave, onClose }: {
+function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserIsAdmin, onSave, onClose }: {
   webhookUrl: string; members: string[]; memberIds: Record<string, string>; projectId: string;
+  currentUserIsAdmin?: boolean;
   onSave: (url: string, members: string[], ids: Record<string, string>) => void; onClose: () => void;
 }) {
   const [url, setUrl] = useState(webhookUrl);
@@ -533,7 +534,7 @@ function SettingsModal({ webhookUrl, members, memberIds, projectId, onSave, onCl
 
         {activeTab === "access" && (
           <>
-            <ProjectMemberSettings projectId={projectId} />
+            <ProjectMemberSettings projectId={projectId} currentUserIsAdmin={currentUserIsAdmin} />
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
               <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>閉じる</button>
             </div>
@@ -667,7 +668,7 @@ function BoardView({ project, onBack }: { project: ProjectType; onBack: () => vo
 function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession, onLogout }: {
   project: ProjectType; onBack: () => void;
   canEdit: boolean; isRestricted: boolean;
-  projectSession: { name: string; role: string } | null;
+  projectSession: { name: string; role: string; isAdmin?: boolean } | null;
   onLogout: () => void;
 }) {
   const utils = trpc.useUtils();
@@ -918,7 +919,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
       </div>
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} onClose={() => setModal(null)} onSave={saveTask} />}
       {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} memberIds={memberIds} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} />}
-      {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} memberIds={memberIds} projectId={project.id} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} memberIds={memberIds} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
     </div>
   );
 }

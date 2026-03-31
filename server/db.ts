@@ -8,6 +8,7 @@ import {
   comments, InsertComment,
   settings,
   projectMembers, InsertProjectMember,
+  invitations, InsertInvitation,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -94,6 +95,8 @@ export async function deleteProject(id: string) {
   }
   await db.delete(tasks).where(eq(tasks.projectId, id));
   await db.delete(columns).where(eq(columns.projectId, id));
+  await db.delete(projectMembers).where(eq(projectMembers.projectId, id));
+  await db.delete(invitations).where(eq(invitations.projectId, id));
   await db.delete(projects).where(eq(projects.id, id));
 }
 
@@ -212,6 +215,15 @@ export async function getMemberByNameAndProject(projectId: string, name: string)
   return result.length > 0 ? result[0] : null;
 }
 
+export async function getMemberByEmailAndProject(projectId: string, email: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(projectMembers)
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.email, email)))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
 export async function createProjectMember(data: InsertProjectMember) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
@@ -236,4 +248,36 @@ export async function hasAnyMember(projectId: string): Promise<boolean> {
   const result = await db.select({ id: projectMembers.id }).from(projectMembers)
     .where(eq(projectMembers.projectId, projectId)).limit(1);
   return result.length > 0;
+}
+
+// ─── Invitation helpers ─────────────────────────────────────────────────────
+export async function createInvitation(data: InsertInvitation) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.insert(invitations).values(data);
+}
+
+export async function getInvitationByToken(token: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(invitations).where(eq(invitations.token, token)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getInvitationsByProject(projectId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(invitations).where(eq(invitations.projectId, projectId)).orderBy(asc(invitations.createdAt));
+}
+
+export async function updateInvitation(id: number, data: Partial<InsertInvitation>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(invitations).set(data).where(eq(invitations.id, id));
+}
+
+export async function deleteInvitation(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(invitations).where(eq(invitations.id, id));
 }
