@@ -102,11 +102,6 @@ export function ProjectMemberSettings({
 }) {
   const utils = trpc.useUtils();
   const membersQuery = trpc.projectAccess.listMembers.useQuery({ projectId });
-  const invitationsQuery = trpc.projectAccess.listInvitations.useQuery(
-    { projectId },
-    { enabled: currentUserIsAdmin }
-  );
-
   const addMember = trpc.projectAccess.addMember.useMutation({
     onSuccess: () => {
       utils.projectAccess.listMembers.invalidate({ projectId });
@@ -120,23 +115,6 @@ export function ProjectMemberSettings({
   const removeMember = trpc.projectAccess.removeMember.useMutation({
     onSuccess: () => utils.projectAccess.listMembers.invalidate({ projectId }),
   });
-  const sendInvite = trpc.projectAccess.sendInvite.useMutation({
-    onSuccess: (data) => {
-      utils.projectAccess.listInvitations.invalidate({ projectId });
-      setInviteEmail("");
-      setInviteError("");
-      if (!data.emailSent) {
-        setInviteSuccess(`招待リンク: ${data.inviteUrl}`);
-      } else {
-        setInviteSuccess("招待メールを送信しました！");
-      }
-    },
-    onError: (e) => setInviteError(e.message),
-  });
-  const revokeInvite = trpc.projectAccess.revokeInvite.useMutation({
-    onSuccess: () => utils.projectAccess.listInvitations.invalidate({ projectId }),
-  });
-
   const [newName, setNewName] = useState("");
   const [newPass, setNewPass] = useState("");
   const [newRole, setNewRole] = useState<"viewer" | "editor">("editor");
@@ -145,26 +123,10 @@ export function ProjectMemberSettings({
   const [editPassId, setEditPassId] = useState<number | null>(null);
   const [editPassVal, setEditPassVal] = useState("");
 
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"viewer" | "editor">("editor");
-  const [inviteIsAdmin, setInviteIsAdmin] = useState(false);
-  const [inviteError, setInviteError] = useState("");
-  const [inviteSuccess, setInviteSuccess] = useState("");
-
   const members = membersQuery.data || [];
-  const invitations = invitationsQuery.data || [];
-  const pendingInvitations = invitations.filter(i => i.status === "pending");
-
   const handleAdd = () => {
     if (!newName.trim() || !newPass.trim()) { setAddError("名前とパスワードを入力してください"); return; }
     addMember.mutate({ projectId, name: newName.trim(), password: newPass, role: newRole, isAdmin: newIsAdmin });
-  };
-
-  const handleSendInvite = () => {
-    setInviteError("");
-    setInviteSuccess("");
-    if (!inviteEmail.trim()) { setInviteError("メールアドレスを入力してください"); return; }
-    sendInvite.mutate({ projectId, email: inviteEmail.trim(), role: inviteRole, isAdmin: inviteIsAdmin });
   };
 
   const roleBadge = (isAdmin: boolean, role: "viewer" | "editor") => {
@@ -242,73 +204,6 @@ export function ProjectMemberSettings({
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Pending invitations */}
-      {currentUserIsAdmin && pendingInvitations.length > 0 && (
-        <div style={{ marginBottom: 12 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", margin: "0 0 6px" }}>📨 招待中（承認待ち）</p>
-          {pendingInvitations.map((inv) => {
-            const badge = roleBadge(inv.isAdmin, inv.role);
-            return (
-              <div key={inv.id} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, background: "#fffbeb", borderRadius: 8, padding: "6px 10px", border: "1px solid #fde68a" }}>
-                <span style={{ flex: 1, fontSize: 12, color: "#92400e" }}>{inv.email}</span>
-                <span style={{ background: badge.bg, color: badge.color, borderRadius: 6, padding: "2px 7px", fontSize: 10, fontWeight: 700 }}>{badge.label}</span>
-                <button
-                  onClick={() => { if (confirm(`「${inv.email}」の招待を取り消しますか？`)) revokeInvite.mutate({ id: inv.id, projectId }); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#fca5a5", fontSize: 14 }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "#fca5a5")}
-                >×</button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Invite by email (admin only) */}
-      {currentUserIsAdmin && (
-        <div style={{ background: "#f0fdf4", borderRadius: 10, padding: "12px", border: "1.5px dashed #86efac", marginBottom: 12 }}>
-          <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, color: "#16a34a" }}>📧 メールで招待</p>
-          <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-            <input
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="招待するメールアドレス"
-              type="email"
-              style={{ flex: 2, minWidth: 160, border: "1.5px solid #bbf7d0", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }}
-            />
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as "viewer" | "editor")}
-              style={{ border: "1.5px solid #bbf7d0", borderRadius: 8, padding: "6px 8px", fontSize: 12, color: "#16a34a", fontWeight: 700, background: "#fff", cursor: "pointer" }}
-            >
-              <option value="editor">編集可</option>
-              <option value="viewer">閲覧のみ</option>
-            </select>
-            <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "#d97706", cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={inviteIsAdmin}
-                onChange={(e) => setInviteIsAdmin(e.target.checked)}
-              />
-              管理者権限
-            </label>
-          </div>
-          {inviteError && <p style={{ color: "#ef4444", fontSize: 11, margin: "0 0 6px" }}>{inviteError}</p>}
-          {inviteSuccess && (
-            <div style={{ background: "#dcfce7", borderRadius: 6, padding: "6px 10px", marginBottom: 6, fontSize: 11, color: "#16a34a", wordBreak: "break-all" }}>
-              ✅ {inviteSuccess}
-            </div>
-          )}
-          <button
-            onClick={handleSendInvite}
-            disabled={sendInvite.isPending}
-            style={{ background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}
-          >
-            {sendInvite.isPending ? "送信中..." : "招待メールを送信"}
-          </button>
         </div>
       )}
 
