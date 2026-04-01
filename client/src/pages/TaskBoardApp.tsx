@@ -275,7 +275,7 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
                   onFocus={(e) => (e.target.style.borderColor = "#6366f1")} onBlur={(e) => (e.target.style.borderColor = "#e0e7ff")} />
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                   <button onClick={() => addComment(false)} disabled={!commentText.trim()} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 8, padding: "7px 14px", cursor: commentText.trim() ? "pointer" : "not-allowed", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>💾 保存</button>
-                  <button onClick={() => addComment(true)} disabled={!commentText.trim() || sending} style={{ background: commentText.trim() && !sending ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", cursor: commentText.trim() && !sending ? "pointer" : "not-allowed", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>📤 保存してChatに送信</button>
+
                 </div>
               </div>
             </>
@@ -500,21 +500,13 @@ function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserI
 
         {activeTab === "general" && (
           <>
-            {/* Webhook URL */}
-            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>Google Chat Webhook URL</label>
-            <p style={{ fontSize: 11, color: "#94a3b8", margin: "0 0 6px" }}>Google Chat の Incoming Webhook URL を入力してください。</p>
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://chat.googleapis.com/v1/spaces/..."
-              style={{ width: "100%", border: "2px solid #e0e7ff", borderRadius: 10, padding: "9px 11px", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 18, fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }}
-              onFocus={(e) => (e.target.style.borderColor = "#6366f1")} onBlur={(e) => (e.target.style.borderColor = "#e0e7ff")} />
-            {/* Members (Google Chat) */}
-            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 6 }}>メンバー管理 (Google Chat通知用)</label>
+            {/* Members */}
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 6 }}>メンバー管理</label>
             <div style={{ marginBottom: 12 }}>
               {localMembers.map((m, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <input value={m} onChange={(e) => { const nm = [...localMembers]; nm[i] = e.target.value; setLocalMembers(nm); }}
                     style={{ flex: 1, border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
-                  <input value={localIds[m] || ""} onChange={(e) => setLocalIds({ ...localIds, [m]: e.target.value })} placeholder="Google Chat ID"
-                    style={{ width: 140, border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#64748b" }} />
                   <button onClick={() => { setLocalMembers(localMembers.filter((_, j) => j !== i)); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 16 }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
                 </div>
@@ -527,7 +519,7 @@ function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserI
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
-              <button onClick={() => onSave(url, localMembers, localIds)} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: "0 4px 12px rgba(99,102,241,.35)" }}>保存</button>
+              <button onClick={() => onSave("", localMembers, {})} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: "0 4px 12px rgba(99,102,241,.35)" }}>保存</button>
             </div>
           </>
         )}
@@ -608,7 +600,7 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
                 <div style={{ position: "absolute", top: 14, right: 14, display: "flex", gap: 4 }}>
                   <button onClick={(e) => { e.stopPropagation(); setEditingId(p.id); setNameVal(p.name); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "2px 4px", borderRadius: 6 }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")} onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>✏️</button>
-                  {projects.length > 1 && <button onClick={(e) => { e.stopPropagation(); if (window.confirm(`「${p.name}」を削除しますか？`)) onDelete(p.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "2px 4px", borderRadius: 6 }}
+                  {<button onClick={(e) => { e.stopPropagation(); if (window.confirm(`「${p.name}」を削除しますか？`)) onDelete(p.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "2px 4px", borderRadius: 6 }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>🗑</button>}
                 </div>
               </div>
@@ -677,8 +669,8 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   const colsQuery = trpc.column.list.useQuery({ projectId: project.id });
   const tasksQuery = trpc.task.list.useQuery({ projectId: project.id });
   const webhookQuery = trpc.setting.get.useQuery({ key: "webhook_url" });
-  const membersQuery = trpc.setting.get.useQuery({ key: "members" });
-  const memberIdsQuery = trpc.setting.get.useQuery({ key: "member_ids" });
+  const membersQuery = trpc.setting.get.useQuery({ key: `members_${project.id}` });
+  const memberIdsQuery = trpc.setting.get.useQuery({ key: `member_ids_${project.id}` });
 
   const cols: Col[] = (colsQuery.data || []).map((c: any) => ({ id: c.id, title: c.title, color: c.color, sortOrder: c.sortOrder }));
   const tasks: TaskType[] = (tasksQuery.data || []).map((t: any) => ({ ...t, tags: t.tags || [], subtasks: t.subtasks || [] }));
@@ -857,8 +849,11 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   }, []);
 
   const onComplete = useCallback((task: TaskType) => {
-    updateTask.mutate({ id: task.id, colId: "done", prevCol: task.colId });
-  }, []);
+    // 「完了」タイトルのカラムIDを動的に取得（なければ"done"にフォールバック）
+    const doneCol = cols.find((c) => c.title === "完了") || cols.find((c) => c.id === "done");
+    const doneColId = doneCol?.id || "done";
+    updateTask.mutate({ id: task.id, colId: doneColId, prevCol: task.colId });
+  }, [cols]);
 
   const onRevert = useCallback((task: TaskType) => {
     updateTask.mutate({ id: task.id, colId: task.prevCol || "todo", prevCol: null });
@@ -866,8 +861,8 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
 
   const handleSaveSettings = (url: string, newMembers: string[], ids: Record<string, string>) => {
     setSetting.mutate({ key: "webhook_url", value: url });
-    setSetting.mutate({ key: "members", value: JSON.stringify(newMembers) });
-    setSetting.mutate({ key: "member_ids", value: JSON.stringify(ids) });
+    setSetting.mutate({ key: `members_${project.id}`, value: JSON.stringify(newMembers) });
+    setSetting.mutate({ key: `member_ids_${project.id}`, value: JSON.stringify(ids) });
     setShowSettings(false);
   };
 

@@ -297,8 +297,9 @@ export const appRouter = router({
           }
         }
 
-        // Merge with existing members setting
-        const existingMembersRaw = await db.getSetting("members");
+        // Merge with existing members setting (per-project key)
+        const membersKey = `members_${projectId}`;
+        const existingMembersRaw = await db.getSetting(membersKey);
         let existingMembers: string[] = [];
         try { existingMembers = JSON.parse(existingMembersRaw || "null") || []; } catch { existingMembers = []; }
         const mergedMembers = [...existingMembers];
@@ -307,9 +308,21 @@ export const appRouter = router({
             mergedMembers.push(name);
           }
         }
-        // Save merged members
+        // Save merged members (per-project key)
         if (mergedMembers.length > 0) {
-          await db.setSetting("members", JSON.stringify(mergedMembers));
+          await db.setSetting(membersKey, JSON.stringify(mergedMembers));
+        }
+        // Create a "完了" column for completed tasks if status column exists
+        let doneColId: string | null = null;
+        if (statusIdx >= 0) {
+          doneColId = "col_" + projectId + "_done";
+          await db.createColumn({
+            id: doneColId,
+            projectId,
+            title: "完了",
+            color: "#10b981",
+            sortOrder: listNames.length,
+          });
         }
 
         // Build tasks in memory first, then batch insert
@@ -347,10 +360,15 @@ export const appRouter = router({
             const sortOrder = taskSortOrders[colId] || 0;
             taskSortOrders[colId] = sortOrder + 1;
 
+            // Check if task is completed (ステータス = "完了" or "done")
+            const statusVal = statusIdx >= 0 ? (row[statusIdx] || "").trim() : "";
+            const isCompleted = statusVal === "完了" || statusVal.toLowerCase() === "done" || statusVal === "完了済み";
+            const effectiveColId = isCompleted && doneColId ? doneColId : colId;
+            const effectivePrevCol = isCompleted ? colId : undefined;
             currentTask = {
               id: uid(),
               projectId,
-              colId,
+              colId: effectiveColId,
               title: taskName,
               assignee,
               priority: "medium",
@@ -360,6 +378,7 @@ export const appRouter = router({
               description: description || null,
               sortOrder,
             };
+            if (effectivePrevCol) (currentTask as any).prevCol = effectivePrevCol;
 
             const checkItem = checklistItemIdx >= 0 ? (row[checklistItemIdx] || "").trim() : "";
             if (checkItem) {
@@ -392,6 +411,7 @@ export const appRouter = router({
           subtasks: t.subtasks,
           description: t.description,
           sortOrder: t.sortOrder,
+          prevCol: (t as any).prevCol || null,
         })));
 
         return {
