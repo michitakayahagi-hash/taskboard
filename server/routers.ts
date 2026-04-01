@@ -12,18 +12,15 @@ import { sendInvitationEmail } from "./_core/mailer";
 // Cookie name for project-level auth sessions
 const PROJECT_SESSION_COOKIE = "tb_proj_session";
 
-// In-memory project session store: token -> { projectId, memberId, role, name, isAdmin, exp }
-const projectSessions = new Map<string, { projectId: string; memberId: number; role: "viewer" | "editor"; name: string; isAdmin: boolean; exp: number }>();
-
 function genToken() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
 
-function getProjectSession(req: { cookies?: Record<string, string> }, projectId: string) {
+async function getProjectSession(req: { cookies?: Record<string, string> }, projectId: string) {
   const raw = req.cookies?.[PROJECT_SESSION_COOKIE];
   if (!raw) return null;
-  const session = projectSessions.get(raw);
+  const session = await db.getProjectSessionByToken(raw);
   if (!session) return null;
   if (session.projectId !== projectId) return null;
-  if (Date.now() > session.exp) { projectSessions.delete(raw); return null; }
+  if (Date.now() > session.exp) { await db.deleteProjectSession(raw); return null; }
   return session;
 }
 
@@ -455,7 +452,7 @@ export const appRouter = router({
     getSession: publicProcedure
       .input(z.object({ projectId: z.string() }))
       .query(async ({ input, ctx }) => {
-        const session = getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
+        const session = await getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
         if (!session) return null;
         return { name: session.name, role: session.role, isAdmin: session.isAdmin };
       }),
@@ -470,7 +467,7 @@ export const appRouter = router({
         if (!ok) throw new TRPCError({ code: "UNAUTHORIZED", message: "名前またはパスワードが正しくありません" });
         const token = genToken();
         const exp = Date.now() + 10 * 365 * 24 * 60 * 60 * 1000; // 10 years (permanent)
-        projectSessions.set(token, { projectId: input.projectId, memberId: member.id, role: member.role, name: member.name, isAdmin: member.isAdmin, exp });
+        await db.createProjectSession({ token, projectId: input.projectId, memberId: member.id, role: member.role, name: member.name, isAdmin: member.isAdmin, exp });
         const res = ctx.res as unknown as { cookie: (name: string, value: string, opts: object) => void };
         res.cookie(PROJECT_SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", maxAge: 10 * 365 * 24 * 60 * 60 * 1000 });
         return { success: true, name: member.name, role: member.role, isAdmin: member.isAdmin };
@@ -482,7 +479,7 @@ export const appRouter = router({
       .mutation(async ({ ctx }) => {
         const req = ctx.req as unknown as { cookies?: Record<string, string> };
         const raw = req.cookies?.[PROJECT_SESSION_COOKIE];
-        if (raw) projectSessions.delete(raw);
+        if (raw) await db.deleteProjectSession(raw);
         const res = ctx.res as unknown as { clearCookie: (name: string, opts: object) => void };
         res.clearCookie(PROJECT_SESSION_COOKIE, { httpOnly: true, sameSite: "lax" });
         return { success: true };
@@ -540,7 +537,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         // Check caller is admin
-        const session = getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
+        const session = await getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
         const hasMembers = await db.hasAnyMember(input.projectId);
         if (hasMembers && (!session || !session.isAdmin)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "招待は管理者のみ実行できます" });
@@ -653,7 +650,7 @@ export const appRouter = router({
     listInvitations: publicProcedure
       .input(z.object({ projectId: z.string() }))
       .query(async ({ input, ctx }) => {
-        const session = getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
+        const session = await getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
         const hasMembers = await db.hasAnyMember(input.projectId);
         if (hasMembers && (!session || !session.isAdmin)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "管理者のみ閲覧できます" });
@@ -666,7 +663,7 @@ export const appRouter = router({
     revokeInvite: publicProcedure
       .input(z.object({ id: z.number(), projectId: z.string() }))
       .mutation(async ({ input, ctx }) => {
-        const session = getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
+        const session = await getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
         const hasMembers = await db.hasAnyMember(input.projectId);
         if (hasMembers && (!session || !session.isAdmin)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "管理者のみ実行できます" });

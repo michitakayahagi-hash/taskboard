@@ -9,6 +9,7 @@ import {
   settings,
   projectMembers, InsertProjectMember,
   invitations, InsertInvitation,
+  projectSessions, InsertProjectSession,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -280,4 +281,22 @@ export async function deleteInvitation(id: number) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.delete(invitations).where(eq(invitations.id, id));
+}
+
+// ─── Project Sessions (DB-persisted) ─────────────────────────────────────────
+export async function createProjectSession(data: InsertProjectSession) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.insert(projectSessions).values(data);
+}
+export async function getProjectSessionByToken(token: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(projectSessions).where(eq(projectSessions.token, token)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+export async function deleteProjectSession(token: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(projectSessions).where(eq(projectSessions.token, token));
 }

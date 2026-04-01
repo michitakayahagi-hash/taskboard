@@ -7,6 +7,26 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { migrate } from "drizzle-orm/mysql2/migrator";
+import { drizzle } from "drizzle-orm/mysql2";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+async function runMigrations() {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const db = drizzle(process.env.DATABASE_URL);
+    // dist/index.js -> dist/ -> project root -> drizzle/
+    const migrationsFolder = path.resolve(__dirname, "../drizzle");
+    await migrate(db, { migrationsFolder });
+    console.log("[DB] Migrations applied successfully");
+  } catch (err) {
+    console.error("[DB] Migration error:", err);
+  }
+}
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -28,6 +48,9 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  // Run DB migrations before starting the server
+  await runMigrations();
+
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads

@@ -1,4 +1,4 @@
-import { boolean, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, boolean, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -138,3 +138,20 @@ export const invitations = mysqlTable("invitations", {
 
 export type Invitation = typeof invitations.$inferSelect;
 export type InsertInvitation = typeof invitations.$inferInsert;
+
+/**
+ * Project Sessions table (DB-persisted, survives server restarts)
+ */
+export const projectSessions = mysqlTable("project_sessions", {
+  token: varchar("token", { length: 128 }).notNull().primaryKey(),
+  projectId: varchar("projectId", { length: 64 }).notNull(),
+  memberId: int("memberId").notNull(),
+  role: mysqlEnum("role", ["viewer", "editor"]).notNull().default("viewer"),
+  name: varchar("name", { length: 100 }).notNull(),
+  isAdmin: boolean("isAdmin").notNull().default(false),
+  exp: bigint("exp", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ProjectSession = typeof projectSessions.$inferSelect;
+export type InsertProjectSession = typeof projectSessions.$inferInsert;
