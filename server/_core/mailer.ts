@@ -11,11 +11,16 @@ function getTransporter() {
     return null;
   }
 
+  console.log(`[Mailer] Creating transporter: host=${host} port=${port} user=${user} passLen=${pass?.length}`);
   return nodemailer.createTransport({
     host,
     port,
     secure: port === 465,
     auth: { user, pass },
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000,
+    tls: { rejectUnauthorized: false },
   });
 }
 
@@ -38,6 +43,8 @@ export async function sendInvitationEmail({
 
   const from = process.env.SMTP_FROM || process.env.SMTP_USER;
 
+  try {
+  console.log(`[Mailer] Sending invite email to ${to}...`);
   await transporter.sendMail({
     from,
     to,
@@ -59,5 +66,10 @@ export async function sendInvitationEmail({
     `,
   });
 
+  console.log(`[Mailer] Email sent successfully to ${to}`);
   return true;
+  } catch (err) {
+    console.error(`[Mailer] Failed to send email to ${to}:`, err);
+    return false;
+  }
 }
