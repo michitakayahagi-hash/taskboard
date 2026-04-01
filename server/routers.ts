@@ -469,7 +469,7 @@ export const appRouter = router({
         const exp = Date.now() + 10 * 365 * 24 * 60 * 60 * 1000; // 10 years (permanent)
         await db.createProjectSession({ token, projectId: input.projectId, memberId: member.id, role: member.role, name: member.name, isAdmin: member.isAdmin, exp });
         const res = ctx.res as unknown as { cookie: (name: string, value: string, opts: object) => void };
-        res.cookie(PROJECT_SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", maxAge: 10 * 365 * 24 * 60 * 60 * 1000 });
+        res.cookie(PROJECT_SESSION_COOKIE, token, { httpOnly: true, sameSite: "none", secure: true, maxAge: 10 * 365 * 24 * 60 * 60 * 1000 });
         return { success: true, name: member.name, role: member.role, isAdmin: member.isAdmin };
       }),
 
@@ -481,7 +481,7 @@ export const appRouter = router({
         const raw = req.cookies?.[PROJECT_SESSION_COOKIE];
         if (raw) await db.deleteProjectSession(raw);
         const res = ctx.res as unknown as { clearCookie: (name: string, opts: object) => void };
-        res.clearCookie(PROJECT_SESSION_COOKIE, { httpOnly: true, sameSite: "lax" });
+        res.clearCookie(PROJECT_SESSION_COOKIE, { httpOnly: true, sameSite: "none", secure: true });
         return { success: true };
       }),
 
@@ -640,7 +640,7 @@ export const appRouter = router({
         if (newMember) {
           projectSessions.set(token, { projectId: inv.projectId, memberId: newMember.id, role: newMember.role, name: newMember.name, isAdmin: newMember.isAdmin, exp });
           const res = ctx.res as unknown as { cookie: (name: string, value: string, opts: object) => void };
-          res.cookie(PROJECT_SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", maxAge: 10 * 365 * 24 * 60 * 60 * 1000 });
+          res.cookie(PROJECT_SESSION_COOKIE, token, { httpOnly: true, sameSite: "none", secure: true, maxAge: 10 * 365 * 24 * 60 * 60 * 1000 });
         }
 
         return { success: true, projectId: inv.projectId, name: input.name, role: inv.role, isAdmin: inv.isAdmin };
