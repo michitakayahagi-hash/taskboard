@@ -92,6 +92,34 @@ export function ProjectLoginModal({
   );
 }
 
+// ─── Share Info Button ────────────────────────────────────────────────────────
+function ShareInfoButton({ name, password }: { name: string; password: string }) {
+  const [copied, setCopied] = useState(false);
+  const appUrl = window.location.origin;
+  const shareText = `【TaskBoardのログイン情報】\nURL: ${appUrl}\n名前: ${name}\nパスワード: ${password}`;
+  const handleCopy = () => {
+    navigator.clipboard.writeText(shareText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      title="ログイン情報をコピー"
+      style={{
+        background: copied ? "#10b981" : "#ede9fe",
+        color: copied ? "#fff" : "#6366f1",
+        border: "none", borderRadius: 6, padding: "3px 8px",
+        fontSize: 11, cursor: "pointer", fontWeight: 700,
+        whiteSpace: "nowrap", transition: "background 0.2s",
+      }}
+    >
+      {copied ? "コピー済み ✓" : "共有"}
+    </button>
+  );
+}
+
 // ─── Member Management (in Settings Modal) ───────────────────────────────────
 export function ProjectMemberSettings({
   projectId,
@@ -122,11 +150,29 @@ export function ProjectMemberSettings({
   const [addError, setAddError] = useState("");
   const [editPassId, setEditPassId] = useState<number | null>(null);
   const [editPassVal, setEditPassVal] = useState("");
+  // パスワード表示状態管理
+  const [visiblePassIds, setVisiblePassIds] = useState<Set<number>>(new Set());
+  const [memberPasswords, setMemberPasswords] = useState<Record<number, string>>({});
 
   const members = membersQuery.data || [];
   const handleAdd = () => {
     if (!newName.trim() || !newPass.trim()) { setAddError("名前とパスワードを入力してください"); return; }
-    addMember.mutate({ projectId, name: newName.trim(), password: newPass, role: newRole, isAdmin: newIsAdmin });
+    // パスワードを記憶しておく（共有ボタン用）
+    const tempName = newName.trim();
+    const tempPass = newPass;
+    addMember.mutate({ projectId, name: tempName, password: tempPass, role: newRole, isAdmin: newIsAdmin }, {
+      onSuccess: () => {
+        // 追加成功後にパスワードを記憶
+        setTimeout(() => {
+          membersQuery.refetch().then((res) => {
+            const added = res.data?.find(m => m.name === tempName);
+            if (added) {
+              setMemberPasswords(prev => ({ ...prev, [added.id]: tempPass }));
+            }
+          });
+        }, 300);
+      }
+    });
   };
 
   const roleBadge = (isAdmin: boolean, role: "viewer" | "editor") => {
@@ -150,6 +196,7 @@ export function ProjectMemberSettings({
         <div style={{ marginBottom: 12 }}>
           {members.map((m) => {
             const badge = roleBadge(m.isAdmin, m.role);
+            const savedPass = memberPasswords[m.id];
             return (
               <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, background: "#f8f7ff", borderRadius: 8, padding: "6px 10px" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -159,6 +206,10 @@ export function ProjectMemberSettings({
                 <span style={{ background: badge.bg, color: badge.color, borderRadius: 6, padding: "2px 7px", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>
                   {badge.label}
                 </span>
+                {/* 共有ボタン（パスワードが記憶されている場合のみ表示） */}
+                {savedPass && (
+                  <ShareInfoButton name={m.name} password={savedPass} />
+                )}
                 {currentUserIsAdmin && (
                   <>
                     <select
@@ -184,7 +235,14 @@ export function ProjectMemberSettings({
                           style={{ width: 90, border: "1.5px solid #c7d2fe", borderRadius: 6, padding: "3px 6px", fontSize: 11, outline: "none" }}
                         />
                         <button
-                          onClick={() => { if (editPassVal.trim()) { updateMember.mutate({ id: m.id, password: editPassVal }); setEditPassId(null); setEditPassVal(""); } }}
+                          onClick={() => {
+                            if (editPassVal.trim()) {
+                              updateMember.mutate({ id: m.id, password: editPassVal });
+                              // 新しいパスワードを記憶
+                              setMemberPasswords(prev => ({ ...prev, [m.id]: editPassVal }));
+                              setEditPassId(null); setEditPassVal("");
+                            }
+                          }}
                           style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer" }}>保存</button>
                         <button onClick={() => { setEditPassId(null); setEditPassVal(""); }}
                           style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer" }}>×</button>
@@ -218,7 +276,7 @@ export function ProjectMemberSettings({
               style={{ flex: 1, minWidth: 80, border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }}
             />
             <input
-              type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)}
+              value={newPass} onChange={(e) => setNewPass(e.target.value)}
               placeholder="パスワード"
               style={{ flex: 1, minWidth: 80, border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }}
             />
@@ -235,13 +293,21 @@ export function ProjectMemberSettings({
             </label>
           </div>
           {addError && <p style={{ color: "#ef4444", fontSize: 11, margin: "0 0 6px" }}>{addError}</p>}
-          <button
-            onClick={handleAdd}
-            disabled={addMember.isPending}
-            style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}
-          >
-            {addMember.isPending ? "追加中..." : "追加"}
-          </button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              onClick={handleAdd}
+              disabled={addMember.isPending}
+              style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}
+            >
+              {addMember.isPending ? "追加中..." : "追加"}
+            </button>
+            {newName.trim() && newPass.trim() && (
+              <ShareInfoButton name={newName.trim()} password={newPass} />
+            )}
+          </div>
+          <p style={{ margin: "8px 0 0", fontSize: 10, color: "#94a3b8" }}>
+            ※「共有」ボタンでURL・名前・パスワードをコピーしてメンバーに送れます
+          </p>
         </div>
       )}
     </div>
