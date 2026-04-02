@@ -155,3 +155,18 @@ export const projectSessions = mysqlTable("project_sessions", {
 
 export type ProjectSession = typeof projectSessions.$inferSelect;
 export type InsertProjectSession = typeof projectSessions.$inferInsert;
+
+/**
+ * Attachments table (files attached to tasks)
+ */
+export const attachments = mysqlTable("attachments", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: varchar("taskId", { length: 64 }).notNull(),
+  fileName: varchar("fileName", { length: 255 }).notNull(),
+  fileUrl: text("fileUrl").notNull(),
+  fileSize: int("fileSize").notNull(),
+  uploadedBy: varchar("uploadedBy", { length: 100 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type Attachment = typeof attachments.$inferSelect;
+export type InsertAttachment = typeof attachments.$inferInsert;

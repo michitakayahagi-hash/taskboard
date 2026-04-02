@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import { TRPCError } from "@trpc/server";
 import { randomUUID } from "crypto";
 import { sendInvitationEmail } from "./_core/mailer";
+import { storagePut } from "./storage";
 
 // Cookie name for project-level auth sessions
 const PROJECT_SESSION_COOKIE = "tb_proj_session";
@@ -672,8 +673,52 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  // ─── Attachments ─────────────────────────────────────────────────────────────
+  attachment: router({
+    // 添付ファイル一覧取得
+    list: publicProcedure
+      .input(z.object({ taskId: z.string() }))
+      .query(async ({ input }) => {
+        return db.getAttachmentsByTask(input.taskId);
+      }),
+    // 添付ファイル登録（Base64エンコードで受け取り、サーバーサイドでストレージに保存）
+    upload: publicProcedure
+      .input(z.object({
+        taskId: z.string(),
+        fileName: z.string(),
+        fileBase64: z.string(),
+        fileSize: z.number(),
+        mimeType: z.string(),
+        uploadedBy: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const { taskId, fileName, fileBase64, fileSize, mimeType, uploadedBy } = input;
+        // Base64デコード
+        const base64Data = fileBase64.replace(/^data:[^;]+;base64,/, "");
+        const buffer = Buffer.from(base64Data, "base64");
+        // ストレージに保存
+        const key = `attachments/${taskId}/${Date.now()}_${fileName}`;
+        let fileUrl: string;
+        try {
+          const result = await storagePut(key, buffer, mimeType);
+          fileUrl = result.url;
+        } catch (e) {
+          // ストレージが利用不可な場合はフォールバック：Base64 URLを直接保存
+          fileUrl = `data:${mimeType};base64,${base64Data}`;
+        }
+        await db.createAttachment({ taskId, fileName, fileUrl, fileSize, uploadedBy });
+        return { success: true, fileUrl };
+      }),
+    // 添付ファイル削除
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteAttachment(input.id);
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
 
-export type AppRouter = typeof appRouter;

@@ -149,7 +149,7 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
   onUpdateDescription: (taskId: string, desc: string) => void;
   onUpdateField: (id: string, field: string, value: unknown) => void;
 }) {
-  const [tab, setTab] = useState<"subtasks" | "comments">("subtasks");
+  const [tab, setTab] = useState<"subtasks" | "comments" | "attachments">("subtasks");
   const [newSub, setNewSub] = useState("");
   const [commentText, setCommentText] = useState("");
   const [sender, setSender] = useState(members[0] || "");
@@ -159,6 +159,39 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
 
   // Load comments from DB
   const commentsQuery = trpc.comment.list.useQuery({ taskId: task.id });
+  // Load attachments from DB
+  const attachmentsQuery = trpc.attachment.list.useQuery({ taskId: task.id });
+  const attachments = attachmentsQuery.data || [];
+  const uploadAttachment = trpc.attachment.upload.useMutation({ onSuccess: () => attachmentsQuery.refetch() });
+  const deleteAttachment = trpc.attachment.delete.useMutation({ onSuccess: () => attachmentsQuery.refetch() });
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setChatMsg("✗ ファイルサイズは10MB以下にしてください"); setTimeout(() => setChatMsg(""), 3000); return; }
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const base64 = ev.target?.result as string;
+        await uploadAttachment.mutateAsync({
+          taskId: task.id,
+          fileName: file.name,
+          fileBase64: base64,
+          fileSize: file.size,
+          mimeType: file.type || "application/octet-stream",
+          uploadedBy: sender || members[0] || "unknown",
+        });
+        setChatMsg("✓ ファイルをアップロードしました");
+        setTimeout(() => setChatMsg(""), 2000);
+        setUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch { setChatMsg("✗ アップロードに失敗しました"); setTimeout(() => setChatMsg(""), 3000); setUploading(false); }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
   const dbComments = commentsQuery.data || [];
 
   const addComment = async (sendToChat: boolean) => {
@@ -228,9 +261,9 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
         <DescriptionField task={task} onUpdateDescription={onUpdateDescription} />
         {/* Tabs */}
         <div style={{ display: "flex", borderBottom: "1.5px solid #f0f0ff", flexShrink: 0 }}>
-          {(["subtasks", "comments"] as const).map((t) => (
+          {(["subtasks", "comments", "attachments"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "10px", fontSize: 12, fontWeight: 700, color: tab === t ? "#6366f1" : "#94a3b8", background: "none", border: "none", borderBottom: tab === t ? "2.5px solid #6366f1" : "2.5px solid transparent", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>
-              {t === "subtasks" ? "✅ 小タスク" : "💬 コメント"}
+              {t === "subtasks" ? "✅ 小タスク" : t === "comments" ? "💬 コメント" : "📎 添付"}
             </button>
           ))}
         </div>
@@ -251,6 +284,30 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
                 <input value={newSub} onChange={(e) => setNewSub(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && newSub.trim()) { onUpdateSubtasks(task.id, [...(task.subtasks || []), { id: Date.now(), text: newSub.trim(), done: false }]); setNewSub(""); } }}
                   placeholder="小タスクを追加..." style={{ flex: 1, border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
               </div>
+            </>
+          ) : tab === "attachments" ? (
+            <>
+              <input ref={fileInputRef} type="file" style={{ display: "none" }} onChange={handleFileUpload} />
+              <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                style={{ width: "100%", background: uploading ? "#e0e7ff" : "#ede9fe", border: "1.5px dashed #6366f1", borderRadius: 10, padding: "12px", cursor: uploading ? "not-allowed" : "pointer", fontSize: 13, color: "#6366f1", fontWeight: 700, fontFamily: "'Noto Sans JP',sans-serif", marginBottom: 12 }}>
+                {uploading ? "アップロード中..." : "📎 ファイルを選択（最大10MB）"}
+              </button>
+              {attachments.length === 0 && !uploading && <p style={{ fontSize: 13, color: "#c7d2fe", textAlign: "center", marginTop: 8 }}>添付ファイルはまだありません</p>}
+              {(attachments as any[]).map((a) => {
+                const isImage = a.fileUrl && (a.fileName.match(/\.(png|jpg|jpeg|gif|webp)$/i) || a.fileUrl.startsWith("data:image"));
+                const formatSize = (b: number) => b < 1024 ? b + "B" : b < 1024*1024 ? (b/1024).toFixed(1)+"KB" : (b/1024/1024).toFixed(1)+"MB";
+                return (
+                  <div key={a.id} style={{ background: "#f8f7ff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                    {isImage ? <img src={a.fileUrl} alt={a.fileName} style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} /> : <div style={{ width: 40, height: 40, background: "#e0e7ff", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>📄</div>}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <a href={a.fileUrl} download={a.fileName} style={{ fontSize: 13, fontWeight: 700, color: "#6366f1", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.fileName}</a>
+                      <span style={{ fontSize: 10, color: "#94a3b8" }}>{formatSize(a.fileSize)} ・ {a.uploadedBy} ・ {new Date(a.createdAt).toLocaleDateString("ja-JP")}</span>
+                    </div>
+                    <button onClick={() => deleteAttachment.mutate({ id: a.id })} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 16, flexShrink: 0 }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
+                  </div>
+                );
+              })}
             </>
           ) : (
             <>

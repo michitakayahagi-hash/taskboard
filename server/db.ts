@@ -10,6 +10,7 @@ import {
   projectMembers, InsertProjectMember,
   invitations, InsertInvitation,
   projectSessions, InsertProjectSession,
+  attachments, InsertAttachment,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -299,4 +300,21 @@ export async function deleteProjectSession(token: string) {
   const db = await getDb();
   if (!db) return;
   await db.delete(projectSessions).where(eq(projectSessions.token, token));
+}
+
+// ─── Attachments ─────────────────────────────────────────────────────────────
+export async function createAttachment(data: InsertAttachment) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.insert(attachments).values(data);
+}
+export async function getAttachmentsByTask(taskId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(attachments).where(eq(attachments.taskId, taskId)).orderBy(asc(attachments.createdAt));
+}
+export async function deleteAttachment(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(attachments).where(eq(attachments.id, id));
 }
