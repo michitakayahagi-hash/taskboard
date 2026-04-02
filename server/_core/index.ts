@@ -27,6 +27,26 @@ async function runMigrations() {
   } catch (err) {
     console.error("[DB] Migration error:", err);
   }
+  // Ensure attachments table exists (created manually if migration didn't run)
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    await conn.execute(`CREATE TABLE IF NOT EXISTS attachments (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      task_id VARCHAR(255) NOT NULL,
+      file_name VARCHAR(500) NOT NULL,
+      file_url TEXT NOT NULL,
+      file_size INT NOT NULL DEFAULT 0,
+      mime_type VARCHAR(255) NOT NULL DEFAULT 'application/octet-stream',
+      uploaded_by VARCHAR(255) NOT NULL DEFAULT 'unknown',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_task_id (task_id)
+    )`);
+    console.log("[DB] attachments table ensured");
+    await conn.end();
+  } catch (err) {
+    console.error("[DB] attachments table error:", err);
+  }
 }
 
 function isPortAvailable(port: number): Promise<boolean> {
