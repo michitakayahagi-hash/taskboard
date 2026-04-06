@@ -11,6 +11,7 @@ import {
   invitations, InsertInvitation,
   projectSessions, InsertProjectSession,
   attachments, InsertAttachment,
+  subtaskTemplates, InsertSubtaskTemplate,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -317,4 +318,26 @@ export async function deleteAttachment(id: number) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.delete(attachments).where(eq(attachments.id, id));
+}
+
+// ─── Subtask Templates ────────────────────────────────────────────────────────
+export async function getSubtaskTemplates(projectId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(subtaskTemplates).where(eq(subtaskTemplates.projectId, projectId)).orderBy(asc(subtaskTemplates.createdAt));
+}
+export async function createSubtaskTemplate(data: InsertSubtaskTemplate) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.insert(subtaskTemplates).values(data);
+}
+export async function updateSubtaskTemplate(id: number, data: { name?: string; items?: string[] }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(subtaskTemplates).set(data).where(eq(subtaskTemplates.id, id));
+}
+export async function deleteSubtaskTemplate(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(subtaskTemplates).where(eq(subtaskTemplates.id, id));
 }

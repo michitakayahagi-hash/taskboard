@@ -718,6 +718,46 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  // ─── Subtask Templates ──────────────────────────────────────────────────────
+  subtaskTemplate: router({
+    // テンプレート一覧取得
+    list: publicProcedure
+      .input(z.object({ projectId: z.string() }))
+      .query(async ({ input }) => {
+        return db.getSubtaskTemplates(input.projectId);
+      }),
+    // テンプレート作成
+    create: publicProcedure
+      .input(z.object({
+        projectId: z.string(),
+        name: z.string().min(1),
+        items: z.array(z.string()),
+      }))
+      .mutation(async ({ input }) => {
+        await db.createSubtaskTemplate(input);
+        return { success: true };
+      }),
+    // テンプレート更新
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        items: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await db.updateSubtaskTemplate(id, data);
+        return { success: true };
+      }),
+    // テンプレート削除
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteSubtaskTemplate(input.id);
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

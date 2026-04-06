@@ -47,6 +47,23 @@ async function runMigrations() {
   } catch (err) {
     console.error("[DB] attachments table error:", err);
   }
+  // Ensure subtask_templates table exists
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    await conn.execute(`CREATE TABLE IF NOT EXISTS subtask_templates (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      project_id VARCHAR(255) NOT NULL,
+      name VARCHAR(500) NOT NULL,
+      items JSON NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_project_id (project_id)
+    )`);
+    console.log("[DB] subtask_templates table ensured");
+    await conn.end();
+  } catch (err) {
+    console.error("[DB] subtask_templates table error:", err);
+  }
 }
 
 function isPortAvailable(port: number): Promise<boolean> {

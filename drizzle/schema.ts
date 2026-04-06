@@ -170,3 +170,19 @@ export const attachments = mysqlTable("attachments", {
 });
 export type Attachment = typeof attachments.$inferSelect;
 export type InsertAttachment = typeof attachments.$inferInsert;
+
+/**
+ * Subtask Templates table
+ * - プロジェクトごとに小タスクのテンプレートを保存
+ * - items: 小タスク名の配列（JSON）
+ */
+export const subtaskTemplates = mysqlTable("subtask_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: varchar("projectId", { length: 64 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  items: json("items").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SubtaskTemplate = typeof subtaskTemplates.$inferSelect;
+export type InsertSubtaskTemplate = typeof subtaskTemplates.$inferInsert;

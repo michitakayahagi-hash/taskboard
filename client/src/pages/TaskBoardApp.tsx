@@ -7,6 +7,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import ImportModal from "./ImportModal";
 import { ProjectLoginModal, ProjectMemberSettings } from "./ProjectAccessModal";
+import { SubtaskTemplatePanel } from "@/features/SubtaskTemplatePanel";
 
 // ─── 定数 ────────────────────────────────────────────────────────────────────
 const PRI: Record<string, { label: string; color: string }> = {
@@ -284,6 +285,12 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
                 <input value={newSub} onChange={(e) => setNewSub(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && newSub.trim()) { onUpdateSubtasks(task.id, [...(task.subtasks || []), { id: Date.now(), text: newSub.trim(), done: false }]); setNewSub(""); } }}
                   placeholder="小タスクを追加..." style={{ flex: 1, border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
               </div>
+              {/* テンプレートパネル（features/SubtaskTemplatePanel.tsx） */}
+              <SubtaskTemplatePanel
+                projectId={projectId}
+                currentSubtasks={task.subtasks || []}
+                onApply={(subtasks) => onUpdateSubtasks(task.id, subtasks)}
+              />
             </>
           ) : tab === "attachments" ? (
             <>
