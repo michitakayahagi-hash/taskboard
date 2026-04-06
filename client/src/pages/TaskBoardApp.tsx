@@ -263,7 +263,7 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
         {/* Tabs */}
         <div style={{ display: "flex", borderBottom: "1.5px solid #f0f0ff", flexShrink: 0 }}>
           {(["subtasks", "comments", "attachments"] as const).map((t) => (
-            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "10px", fontSize: 12, fontWeight: 700, color: tab === t ? "#6366f1" : "#94a3b8", background: "none", border: "none", borderBottom: tab === t ? "2.5px solid #6366f1" : "2.5px solid transparent", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>
+            <button key={t} onClick={(e) => { e.stopPropagation(); setTab(t); }} style={{ flex: 1, padding: "10px", fontSize: 12, fontWeight: 700, color: tab === t ? "#6366f1" : "#94a3b8", background: "none", border: "none", borderBottom: tab === t ? "2.5px solid #6366f1" : "2.5px solid transparent", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>
               {t === "subtasks" ? "✅ 小タスク" : t === "comments" ? "💬 コメント" : "📎 添付"}
             </button>
           ))}
