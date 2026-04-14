@@ -66,6 +66,35 @@ async function runMigrations() {
   }
 }
 
+async function trimDoneTasksOnStartup() {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    // 完了カラムを取得
+    const [cols] = await conn.execute("SELECT id FROM `columns` WHERE title = '\u5b8c\u4e86'") as any[];
+    for (const col of cols) {
+      const [rows] = await conn.execute(
+        "SELECT id FROM tasks WHERE colId = ? ORDER BY sortOrder ASC",
+        [col.id]
+      ) as any[];
+      const MAX_DONE = 100;
+      if (rows.length > MAX_DONE) {
+        const toDelete = rows.slice(0, rows.length - MAX_DONE);
+        for (const row of toDelete) {
+          await conn.execute("DELETE FROM comments WHERE taskId = ?", [row.id]);
+          await conn.execute("DELETE FROM tasks WHERE id = ?", [row.id]);
+        }
+        console.log(`[DB] 完了カラム(${col.id}): ${toDelete.length}件の古いタスクを削除しました`);
+      }
+    }
+    await conn.end();
+    console.log("[DB] trimDoneTasks completed");
+  } catch (err) {
+    console.error("[DB] trimDoneTasks error:", err);
+  }
+}
+
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
@@ -88,6 +117,8 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   // Run DB migrations before starting the server
   await runMigrations();
+  // 完了タスクを100件に削減（起動時に一度実行）
+  await trimDoneTasksOnStartup();
 
   const app = express();
   const server = createServer(app);
