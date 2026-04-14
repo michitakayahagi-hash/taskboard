@@ -673,7 +673,7 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
                 <div style={{ position: "absolute", top: 14, right: 14, display: "flex", gap: 4 }}>
                   <button onClick={(e) => { e.stopPropagation(); setEditingId(p.id); setNameVal(p.name); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "2px 4px", borderRadius: 6 }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")} onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>✏️</button>
-                  {<button onClick={(e) => { e.stopPropagation(); if (window.confirm(`「${p.name}」を削除しますか？`)) onDelete(p.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "2px 4px", borderRadius: 6 }}
+                  {<button onClick={(e) => { e.stopPropagation(); if (window.confirm(`「${p.name}」を削除しますか？\n\nタスク・カラム・メンバー情報もすべて削除されます。\nこの操作は元に戻せません。`)) onDelete(p.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "2px 4px", borderRadius: 6 }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>🗑</button>}
                 </div>
               </div>

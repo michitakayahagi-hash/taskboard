@@ -91,15 +91,17 @@ export async function deleteProject(id: string) {
   await db.delete(comments).where(
     eq(comments.taskId, id) // We'll handle this via task deletion
   );
-  // Delete all tasks' comments first
+  // Delete all tasks' comments and attachments first
   const projectTasks = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.projectId, id));
   for (const t of projectTasks) {
     await db.delete(comments).where(eq(comments.taskId, t.id));
+    await db.delete(attachments).where(eq(attachments.taskId, t.id));
   }
   await db.delete(tasks).where(eq(tasks.projectId, id));
   await db.delete(columns).where(eq(columns.projectId, id));
   await db.delete(projectMembers).where(eq(projectMembers.projectId, id));
   await db.delete(invitations).where(eq(invitations.projectId, id));
+  await db.delete(subtaskTemplates).where(eq(subtaskTemplates.projectId, id));
   await db.delete(projects).where(eq(projects.id, id));
 }
 
