@@ -754,7 +754,13 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   // Mutations
   const createCol = trpc.column.create.useMutation({ onSuccess: () => utils.column.list.invalidate({ projectId: project.id }) });
   const updateCol = trpc.column.update.useMutation({ onSuccess: () => utils.column.list.invalidate({ projectId: project.id }) });
-  const deleteColMut = trpc.column.delete.useMutation({ onSuccess: () => utils.column.list.invalidate({ projectId: project.id }) });
+  const deleteColMut = trpc.column.delete.useMutation({
+    onSuccess: () => {
+      utils.column.list.invalidate({ projectId: project.id });
+      utils.task.list.invalidate({ projectId: project.id });
+    },
+    onError: (err) => alert("削除に失敗しました: " + err.message),
+  });
   const createTask = trpc.task.create.useMutation({ onSuccess: () => utils.task.list.invalidate({ projectId: project.id }) });
   const updateTask = trpc.task.update.useMutation({
     onMutate: async (vars) => {
@@ -818,7 +824,14 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   const longPressReadyRef = useRef(false); // 長押し完了フラグ
 
   const filtered = tasks.filter((t) => (!search || t.title.includes(search)) && (filterMember === "all" || t.assignee === filterMember));
-  const colTasks = (colId: string) => filtered.filter((t) => t.colId === colId).sort((a, b) => a.sortOrder - b.sortOrder);
+  const doneColIds = cols.filter((c) => c.title === "完了").map((c) => c.id);
+  const colTasks = (colId: string) => {
+    const list = filtered.filter((t) => t.colId === colId);
+    // 完了カラムは新しい順（sortOrder降順）、それ以外は昇順
+    return doneColIds.includes(colId)
+      ? list.sort((a, b) => b.sortOrder - a.sortOrder)
+      : list.sort((a, b) => a.sortOrder - b.sortOrder);
+  };
 
   const addCol = () => {
     const id = "col" + Date.now();
@@ -1017,7 +1030,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
       <div style={{ padding: "18px 14px", display: "flex", gap: 14, overflowX: "auto", alignItems: "flex-start", WebkitOverflowScrolling: "touch", scrollSnapType: "x proximity", scrollBehavior: "smooth", scrollbarWidth: "none", msOverflowStyle: "none", flex: 1, minHeight: 0, paddingBottom: 24 } as React.CSSProperties} className="hide-scrollbar">
         {cols.map((col) => (
           <ColumnComp key={col.id} col={col} tasks={colTasks(col.id)} draggingId={draggingId} dropTarget={dropTarget} members={members}
-            doneColIds={cols.filter((c) => c.title === "完了").map((c) => c.id)}
+            doneColIds={doneColIds}
             onPointerDown={onPointerDown} onCardClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={setDetailTask}
             onUpdateField={onUpdateField} onAddTask={(colId) => setModal({ defaultCol: colId })} onUpdateColTitle={updateColTitle} onDeleteCol={deleteCol}
             colRef={(el) => { colRefs.current[col.id] = el; }} cardRefs={cardRefs}
