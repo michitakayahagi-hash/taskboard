@@ -111,6 +111,17 @@ export async function getColumnsByProject(projectId: string) {
   if (!db) return [];
   return db.select().from(columns).where(eq(columns.projectId, projectId)).orderBy(asc(columns.sortOrder));
 }
+export async function getColumnById(id: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(columns).where(eq(columns.id, id));
+  return rows[0] || null;
+}
+export async function getTasksByColId(colId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(tasks).where(eq(tasks.colId, colId)).orderBy(asc(tasks.sortOrder));
+}
 
 export async function createColumn(data: InsertColumn) {
   const db = await getDb();

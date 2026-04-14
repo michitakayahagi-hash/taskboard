@@ -189,6 +189,23 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
         await db.updateTask(id, data);
+        // 完了カラムに移動した場合、100件超過分を古い順に自動削除
+        if (data.colId) {
+          try {
+            const colInfo = await db.getColumnById(data.colId);
+            if (colInfo && colInfo.title === "完了") {
+              const doneTasks = await db.getTasksByColId(data.colId);
+              const MAX_DONE = 100;
+              if (doneTasks.length > MAX_DONE) {
+                const sorted = [...doneTasks].sort((a: any, b: any) => a.sortOrder - b.sortOrder);
+                const toDelete = sorted.slice(0, doneTasks.length - MAX_DONE);
+                for (const t of toDelete) {
+                  await db.deleteTask(t.id);
+                }
+              }
+            }
+          } catch (_) { /* エラーは無視 */ }
+        }
         return { success: true };
       }),
     delete: publicProcedure
