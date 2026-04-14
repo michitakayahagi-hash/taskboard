@@ -404,7 +404,7 @@ function TaskCard({ task, dragging, members, onPointerDown, onClick, onComplete,
 }
 
 // ─── Column ───────────────────────────────────────────────────────────────────
-function ColumnComp({ col, tasks, draggingId, dropTarget, members, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs }: {
+function ColumnComp({ col, tasks, draggingId, dropTarget, members, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs, onColDragStart, onColDragOver, onColDrop, colDraggingId }: {
   col: Col; tasks: TaskType[]; draggingId: string | null; dropTarget: { col: string; index: number } | null; members: string[];
   onPointerDown: (e: React.PointerEvent, task: TaskType) => void;
   onCardClick: (task: TaskType) => void;
@@ -417,14 +417,23 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, onPointerDown
   onDeleteCol: (id: string) => void;
   colRef: (el: HTMLDivElement | null) => void;
   cardRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
+  onColDragStart: (colId: string) => void;
+  onColDragOver: (colId: string) => void;
+  onColDrop: () => void;
+  colDraggingId: string | null;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(col.title);
   const isOver = dropTarget?.col === col.id;
   const insertIdx = isOver ? dropTarget!.index : -1;
+  const isColDragging = colDraggingId === col.id;
   return (
-    <div ref={colRef} style={{ background: isOver ? "#ede9fe" : "#f5f3ff", borderRadius: 16, padding: "13px 11px", minWidth: "min(255px, 78vw)", maxWidth: 275, flex: "0 0 min(255px, 78vw)", display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 108px)", boxShadow: isOver ? "0 0 0 2.5px #6366f1, 0 4px 20px rgba(99,102,241,.14)" : "0 2px 8px rgba(99,102,241,.06)", border: isOver ? "2px solid #6366f1" : "1.5px solid rgba(99,102,241,.1)", transition: "background .12s,box-shadow .12s,border-color .12s", scrollSnapAlign: "start" }}>
+    <div ref={colRef}
+      onDragOver={(e) => { e.preventDefault(); onColDragOver(col.id); }}
+      onDrop={(e) => { e.preventDefault(); onColDrop(); }}
+      style={{ background: isOver ? "#ede9fe" : "#f5f3ff", borderRadius: 16, padding: "13px 11px", minWidth: "min(255px, 78vw)", maxWidth: 275, flex: "0 0 min(255px, 78vw)", display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 108px)", boxShadow: isOver ? "0 0 0 2.5px #6366f1, 0 4px 20px rgba(99,102,241,.14)" : "0 2px 8px rgba(99,102,241,.06)", border: isColDragging ? "2px dashed #6366f1" : isOver ? "2px solid #6366f1" : "1.5px solid rgba(99,102,241,.1)", transition: "background .12s,box-shadow .12s,border-color .12s,opacity .12s", scrollSnapAlign: "start", opacity: isColDragging ? 0.5 : 1 }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 12, gap: 8 }}>
+        <div draggable onDragStart={(e) => { e.stopPropagation(); onColDragStart(col.id); }} title="ドラッグして並び替え" style={{ cursor: "grab", color: "#c7d2fe", fontSize: 14, flexShrink: 0, lineHeight: 1, userSelect: "none", padding: "0 2px" }}>⠿</div>
         <div style={{ width: 9, height: 9, borderRadius: "50%", background: col.color, flexShrink: 0, boxShadow: `0 0 0 3px ${col.color}28` }} />
         {editingTitle
           ? <input autoFocus value={titleVal} onChange={(e) => setTitleVal(e.target.value)}
@@ -757,6 +766,25 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   const [ghost, setGhost] = useState<{ task: TaskType; x: number; y: number } | null>(null);
   const [dropTarget, setDT] = useState<{ col: string; index: number } | null>(null);
   const [draggingId, setDId] = useState<string | null>(null);
+  // カラムのドラッグ＆ドロップ状態
+  const [colDraggingId, setColDraggingId] = useState<string | null>(null);
+  const [colDragOverId, setColDragOverId] = useState<string | null>(null);
+  const onColDragStart = (colId: string) => { setColDraggingId(colId); };
+  const onColDragOver = (colId: string) => { if (colId !== colDraggingId) setColDragOverId(colId); };
+  const onColDrop = () => {
+    if (!colDraggingId || !colDragOverId || colDraggingId === colDragOverId) {
+      setColDraggingId(null); setColDragOverId(null); return;
+    }
+    const sorted = [...cols].sort((a, b) => a.sortOrder - b.sortOrder);
+    const fromIdx = sorted.findIndex((c) => c.id === colDraggingId);
+    const toIdx = sorted.findIndex((c) => c.id === colDragOverId);
+    if (fromIdx === -1 || toIdx === -1) { setColDraggingId(null); setColDragOverId(null); return; }
+    const newOrder = [...sorted];
+    const [moved] = newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, moved);
+    newOrder.forEach((c, i) => { updateCol.mutate({ id: c.id, sortOrder: i }); });
+    setColDraggingId(null); setColDragOverId(null);
+  };
   const [detailTask, setDetailTask] = useState<TaskType | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -973,7 +1001,8 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
           <ColumnComp key={col.id} col={col} tasks={colTasks(col.id)} draggingId={draggingId} dropTarget={dropTarget} members={members}
             onPointerDown={onPointerDown} onCardClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={setDetailTask}
             onUpdateField={onUpdateField} onAddTask={(colId) => setModal({ defaultCol: colId })} onUpdateColTitle={updateColTitle} onDeleteCol={deleteCol}
-            colRef={(el) => { colRefs.current[col.id] = el; }} cardRefs={cardRefs} />
+            colRef={(el) => { colRefs.current[col.id] = el; }} cardRefs={cardRefs}
+            onColDragStart={onColDragStart} onColDragOver={onColDragOver} onColDrop={onColDrop} colDraggingId={colDraggingId} />
         ))}
       </div>
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} onClose={() => setModal(null)} onSave={saveTask} />}
