@@ -128,6 +128,13 @@ export async function updateColumn(id: string, data: Partial<InsertColumn>) {
 export async function deleteColumn(id: string) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
+  // カラム内のタスクを取得してコメント・添付ファイルを先に削除
+  const colTasks = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.colId, id));
+  for (const t of colTasks) {
+    await db.delete(comments).where(eq(comments.taskId, t.id));
+    await db.delete(attachments).where(eq(attachments.taskId, t.id));
+  }
+  await db.delete(tasks).where(eq(tasks.colId, id));
   await db.delete(columns).where(eq(columns.id, id));
 }
 

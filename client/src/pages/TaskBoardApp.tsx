@@ -826,7 +826,12 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   };
   const updateColTitle = (id: string, title: string) => updateCol.mutate({ id, title });
   const deleteCol = (id: string) => {
-    if (tasks.some((t) => t.colId === id)) { alert("タスクが残っています"); return; }
+    const colTitle = cols.find((c) => c.id === id)?.title || "この列";
+    const taskCount = tasks.filter((t) => t.colId === id).length;
+    const msg = taskCount > 0
+      ? `「${colTitle}」を削除しますか？\n\n${taskCount}件のタスクも一緒に削除されます。\nこの操作は元に戻せません。`
+      : `「${colTitle}」を削除しますか？`;
+    if (!window.confirm(msg)) return;
     deleteColMut.mutate({ id });
   };
 
