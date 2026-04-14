@@ -756,7 +756,20 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   const updateCol = trpc.column.update.useMutation({ onSuccess: () => utils.column.list.invalidate({ projectId: project.id }) });
   const deleteColMut = trpc.column.delete.useMutation({ onSuccess: () => utils.column.list.invalidate({ projectId: project.id }) });
   const createTask = trpc.task.create.useMutation({ onSuccess: () => utils.task.list.invalidate({ projectId: project.id }) });
-  const updateTask = trpc.task.update.useMutation({ onSuccess: () => utils.task.list.invalidate({ projectId: project.id }) });
+  const updateTask = trpc.task.update.useMutation({
+    onMutate: async (vars) => {
+      await utils.task.list.cancel({ projectId: project.id });
+      const prev = utils.task.list.getData({ projectId: project.id });
+      utils.task.list.setData({ projectId: project.id }, (old) =>
+        old ? old.map((t: any) => t.id === vars.id ? { ...t, ...vars } : t) : old
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) utils.task.list.setData({ projectId: project.id }, ctx.prev);
+    },
+    onSettled: () => utils.task.list.invalidate({ projectId: project.id }),
+  });
   const createComment = trpc.comment.create.useMutation({ onSuccess: (_d, vars) => utils.comment.list.invalidate({ taskId: vars.taskId }) });
   const setSetting = trpc.setting.set.useMutation({ onSuccess: () => { utils.setting.get.invalidate(); } });
 
