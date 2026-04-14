@@ -351,8 +351,8 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
 }
 
 // ─── TaskCard ────────────────────────────────────────────────────────────────
-function TaskCard({ task, dragging, members, onPointerDown, onClick, onComplete, onRevert, onComment, onUpdateField }: {
-  task: TaskType; dragging: boolean; members: string[];
+function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick, onComplete, onRevert, onComment, onUpdateField }: {
+  task: TaskType; dragging: boolean; members: string[]; doneColIds: string[];
   onPointerDown: (e: React.PointerEvent, task: TaskType) => void;
   onClick: (task: TaskType) => void;
   onComplete: (task: TaskType) => void;
@@ -361,7 +361,7 @@ function TaskCard({ task, dragging, members, onPointerDown, onClick, onComplete,
   onUpdateField: (id: string, field: string, value: unknown) => void;
 }) {
   const p = PRI[task.priority] || PRI.medium;
-  const isDone = task.colId === "done";
+  const isDone = doneColIds.includes(task.colId);
   const overdue = !isDone && task.due && new Date(task.due) < new Date(new Date().toDateString());
   return (
     <div onPointerDown={(e) => onPointerDown(e, task)} onClick={() => onClick(task)}
@@ -404,8 +404,8 @@ function TaskCard({ task, dragging, members, onPointerDown, onClick, onComplete,
 }
 
 // ─── Column ───────────────────────────────────────────────────────────────────
-function ColumnComp({ col, tasks, draggingId, dropTarget, members, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs, onColDragStart, onColDragOver, onColDrop, colDraggingId }: {
-  col: Col; tasks: TaskType[]; draggingId: string | null; dropTarget: { col: string; index: number } | null; members: string[];
+function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs, onColDragStart, onColDragOver, onColDrop, colDraggingId }: {
+  col: Col; tasks: TaskType[]; draggingId: string | null; dropTarget: { col: string; index: number } | null; members: string[]; doneColIds: string[];
   onPointerDown: (e: React.PointerEvent, task: TaskType) => void;
   onCardClick: (task: TaskType) => void;
   onComplete: (task: TaskType) => void;
@@ -449,7 +449,7 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, onPointerDown
         {insertIdx === 0 && <DropLine />}
         {tasks.map((task, i) => (
           <div key={task.id} ref={(el) => { cardRefs.current[task.id] = el; }}>
-            <TaskCard task={task} dragging={draggingId === task.id} members={members} onPointerDown={onPointerDown} onClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={onComment} onUpdateField={onUpdateField} />
+            <TaskCard task={task} dragging={draggingId === task.id} members={members} doneColIds={doneColIds} onPointerDown={onPointerDown} onClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={onComment} onUpdateField={onUpdateField} />
             {insertIdx === i + 1 && <DropLine />}
           </div>
         ))}
@@ -1017,6 +1017,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
       <div style={{ padding: "18px 14px", display: "flex", gap: 14, overflowX: "auto", alignItems: "flex-start", WebkitOverflowScrolling: "touch", scrollSnapType: "x proximity", scrollBehavior: "smooth", scrollbarWidth: "none", msOverflowStyle: "none", flex: 1, minHeight: 0, paddingBottom: 24 } as React.CSSProperties} className="hide-scrollbar">
         {cols.map((col) => (
           <ColumnComp key={col.id} col={col} tasks={colTasks(col.id)} draggingId={draggingId} dropTarget={dropTarget} members={members}
+            doneColIds={cols.filter((c) => c.title === "完了").map((c) => c.id)}
             onPointerDown={onPointerDown} onCardClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={setDetailTask}
             onUpdateField={onUpdateField} onAddTask={(colId) => setModal({ defaultCol: colId })} onUpdateColTitle={updateColTitle} onDeleteCol={deleteCol}
             colRef={(el) => { colRefs.current[col.id] = el; }} cardRefs={cardRefs}
