@@ -388,7 +388,7 @@ function TaskCard({ task, dragging, members, onPointerDown, onClick, onComplete,
         );
       })()}
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-        <select value={task.assignee} onChange={(e) => onUpdateField(task.id, "assignee", e.target.value)} style={{ border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff", cursor: "pointer", maxWidth: 72 }}>
+        <select value={task.assignee} onChange={(e) => onUpdateField(task.id, "assignee", e.target.value)} style={{ border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff", cursor: "pointer", maxWidth: 120, minWidth: 0, flex: "0 1 auto" }}>
           {members.map((m: string) => <option key={m}>{m}</option>)}
         </select>
         <input type="date" value={task.due || ""} onChange={(e) => onUpdateField(task.id, "due", e.target.value)} style={{ border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: overdue ? "#ef4444" : "#64748b", background: "#f8f7ff", cursor: "pointer", flex: 1, minWidth: 0 }} />
