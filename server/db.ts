@@ -95,7 +95,7 @@ export async function deleteProject(id: string) {
   const projectTasks = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.projectId, id));
   for (const t of projectTasks) {
     await db.delete(comments).where(eq(comments.taskId, t.id));
-    await db.delete(attachments).where(eq(attachments.taskId, t.id));
+    try { await db.delete(attachments).where(eq(attachments.taskId, t.id)); } catch (_) { /* テーブル未作成の場合は無視 */ }
   }
   await db.delete(tasks).where(eq(tasks.projectId, id));
   await db.delete(columns).where(eq(columns.projectId, id));
@@ -132,7 +132,7 @@ export async function deleteColumn(id: string) {
   const colTasks = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.colId, id));
   for (const t of colTasks) {
     await db.delete(comments).where(eq(comments.taskId, t.id));
-    await db.delete(attachments).where(eq(attachments.taskId, t.id));
+    try { await db.delete(attachments).where(eq(attachments.taskId, t.id)); } catch (_) { /* テーブル未作成の場合は無視 */ }
   }
   await db.delete(tasks).where(eq(tasks.colId, id));
   await db.delete(columns).where(eq(columns.id, id));
