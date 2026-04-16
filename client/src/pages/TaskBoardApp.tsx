@@ -28,7 +28,7 @@ const uid = () => "id" + Date.now() + Math.random().toString(36).slice(2, 8);
 
 // ─── 型定義 ──────────────────────────────────────────────────────────────────
 interface Col { id: string; title: string; color: string; sortOrder: number; }
-interface Subtask { id: number; text: string; done: boolean; }
+interface Subtask { id: number; text: string; done: boolean; assignee?: string; }
 interface CommentType { id?: number; author: string; text: string; createdAt?: Date | string; }
 interface TaskType {
   id: string; colId: string; sortOrder: number; title: string; assignee: string;
@@ -273,12 +273,28 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
           {tab === "subtasks" ? (
             <>
               {(task.subtasks || []).map((s, i) => (
-                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <input type="checkbox" checked={s.done} onChange={() => { const ns = [...task.subtasks]; ns[i] = { ...s, done: !s.done }; onUpdateSubtasks(task.id, ns); }}
-                    style={{ accentColor: "#6366f1" }} />
-                  <span style={{ fontSize: 13, color: s.done ? "#94a3b8" : "#1e1b4b", textDecoration: s.done ? "line-through" : "none", flex: 1 }}>{s.text}</span>
-                  <button onClick={() => onUpdateSubtasks(task.id, task.subtasks.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 14 }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
+                <div key={s.id} style={{ background: "#f8f7ff", borderRadius: 8, padding: "6px 8px", marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <button onClick={() => { if (i === 0) return; const ns = [...task.subtasks]; [ns[i-1], ns[i]] = [ns[i], ns[i-1]]; onUpdateSubtasks(task.id, ns); }}
+                        style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", color: i === 0 ? "#e0e7ff" : "#94a3b8", fontSize: 10, lineHeight: 1, padding: "1px 2px" }}>▲</button>
+                      <button onClick={() => { if (i === task.subtasks.length - 1) return; const ns = [...task.subtasks]; [ns[i], ns[i+1]] = [ns[i+1], ns[i]]; onUpdateSubtasks(task.id, ns); }}
+                        style={{ background: "none", border: "none", cursor: i === task.subtasks.length - 1 ? "default" : "pointer", color: i === task.subtasks.length - 1 ? "#e0e7ff" : "#94a3b8", fontSize: 10, lineHeight: 1, padding: "1px 2px" }}>▼</button>
+                    </div>
+                    <input type="checkbox" checked={s.done} onChange={() => { const ns = [...task.subtasks]; ns[i] = { ...s, done: !s.done }; onUpdateSubtasks(task.id, ns); }}
+                      style={{ accentColor: "#6366f1", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: s.done ? "#94a3b8" : "#1e1b4b", textDecoration: s.done ? "line-through" : "none", flex: 1 }}>{s.text}</span>
+                    <button onClick={() => onUpdateSubtasks(task.id, task.subtasks.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 14, flexShrink: 0 }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: 32 }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>担当:</span>
+                    <select value={s.assignee || ""} onChange={(e) => { const ns = [...task.subtasks]; ns[i] = { ...s, assignee: e.target.value }; onUpdateSubtasks(task.id, ns); }}
+                      style={{ fontSize: 11, border: "1px solid #e0e7ff", borderRadius: 6, padding: "2px 4px", color: "#1e1b4b", background: "#fff", fontFamily: "'Noto Sans JP',sans-serif" }}>
+                      <option value="">未設定</option>
+                      {members.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
                 </div>
               ))}
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
