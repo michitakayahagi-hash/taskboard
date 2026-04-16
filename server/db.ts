@@ -101,7 +101,7 @@ export async function deleteProject(id: string) {
   await db.delete(columns).where(eq(columns.projectId, id));
   await db.delete(projectMembers).where(eq(projectMembers.projectId, id));
   await db.delete(invitations).where(eq(invitations.projectId, id));
-  await db.delete(subtaskTemplates).where(eq(subtaskTemplates.projectId, id));
+  try { await db.delete(subtaskTemplates).where(eq(subtaskTemplates.projectId, id)); } catch (_) { /* テーブル未作成の場合は無視 */ }
   await db.delete(projects).where(eq(projects.id, id));
 }
 
