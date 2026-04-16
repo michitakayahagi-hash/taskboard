@@ -327,10 +327,10 @@ export const appRouter = router({
         if (mergedMembers.length > 0) {
           await db.setSetting(membersKey, JSON.stringify(mergedMembers));
         }
-        // Create a "完了" column for completed tasks if status column exists
-        let doneColId: string | null = null;
-        if (statusIdx >= 0) {
-          doneColId = "col_" + projectId + "_done";
+        // Create a "完了" column for completed tasks (always required)
+        const doneColId = "col_" + projectId + "_done";
+        // Only create if not already in listNames
+        if (!listNames.includes("完了")) {
           await db.createColumn({
             id: doneColId,
             projectId,

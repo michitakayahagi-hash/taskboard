@@ -458,8 +458,10 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
             style={{ flex: 1, fontWeight: 800, fontSize: 13, color: "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif", border: "1.5px solid #6366f1", borderRadius: 6, padding: "1px 6px", outline: "none" }} />
           : <span onClick={() => setEditingTitle(true)} title="クリックで編集" style={{ fontWeight: 800, fontSize: 13, color: "#1e1b4b", flex: 1, fontFamily: "'Noto Sans JP',sans-serif", letterSpacing: 0.3, cursor: "text" }}>{col.title}</span>}
         <span style={{ background: col.color + "22", color: col.color, fontSize: 11, fontWeight: 700, borderRadius: 20, padding: "2px 9px" }}>{tasks.length}</span>
-        <button onClick={() => onDeleteCol(col.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 14, padding: 0, lineHeight: "1" }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
+        {col.title !== "完了" && (
+          <button onClick={() => onDeleteCol(col.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 14, padding: 0, lineHeight: "1" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
+        )}
       </div>
       <div style={{ flex: 1, overflowY: "auto", paddingRight: 2 }}>
         {insertIdx === 0 && <DropLine />}
@@ -988,11 +990,21 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   }, []);
 
   const onComplete = useCallback((task: TaskType) => {
-    // 「完了」タイトルのカラムIDを動的に取得（なければ"done"にフォールバック）
+    // 「完了」タイトルのカラムIDを動的に取得
     const doneCol = cols.find((c) => c.title === "完了") || cols.find((c) => c.id === "done");
-    const doneColId = doneCol?.id || "done";
-    updateTask.mutate({ id: task.id, colId: doneColId, prevCol: task.colId });
-  }, [cols]);
+    if (!doneCol) {
+      // 完了カラムがない場合は作成してから移動
+      const newDoneColId = "col_done_" + Date.now();
+      createCol.mutate(
+        { id: newDoneColId, projectId: project.id, title: "完了", color: "#10b981", sortOrder: cols.length },
+        { onSuccess: () => {
+          updateTask.mutate({ id: task.id, colId: newDoneColId, prevCol: task.colId });
+        }}
+      );
+      return;
+    }
+    updateTask.mutate({ id: task.id, colId: doneCol.id, prevCol: task.colId });
+  }, [cols, project]);
 
   const onRevert = useCallback((task: TaskType) => {
     updateTask.mutate({ id: task.id, colId: task.prevCol || "todo", prevCol: null });
