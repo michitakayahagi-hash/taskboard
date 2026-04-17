@@ -26,6 +26,31 @@ const COL_COLORS = ["#6366f1", "#f59e0b", "#8b5cf6", "#10b981", "#ef4444", "#06b
 const PROJECT_COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316", "#84cc16", "#ec4899"];
 const uid = () => "id" + Date.now() + Math.random().toString(36).slice(2, 8);
 
+// コメントテキストのURL自動リンク化 + Markdown記法 [text](url) 対応
+function renderCommentText(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  // [テキスト](URL) と 生URL の両方にマッチ
+  const regex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"]+)/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > last) {
+      parts.push(text.slice(last, match.index));
+    }
+    if (match[1] && match[2]) {
+      // Markdown記法 [テキスト](URL)
+      parts.push(<a key={key++} href={match[2]} target="_blank" rel="noopener noreferrer" style={{ color: "#6366f1", textDecoration: "underline", wordBreak: "break-all" }}>{match[1]}</a>);
+    } else if (match[3]) {
+      // 生URL
+      parts.push(<a key={key++} href={match[3]} target="_blank" rel="noopener noreferrer" style={{ color: "#6366f1", textDecoration: "underline", wordBreak: "break-all" }}>{match[3]}</a>);
+    }
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 // ─── 型定義 ──────────────────────────────────────────────────────────────────
 interface Col { id: string; title: string; color: string; sortOrder: number; }
 interface Subtask { id: number; text: string; done: boolean; assignee?: string; }
@@ -340,7 +365,7 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
                     <span style={{ fontWeight: 700, fontSize: 12, color: "#6366f1" }}>{c.author}</span>
                     <span style={{ fontSize: 10, color: "#94a3b8" }}>{c.createdAt ? new Date(c.createdAt).toLocaleString("ja-JP") : ""}</span>
                   </div>
-                  <p style={{ margin: 0, fontSize: 13, color: "#1e1b4b", lineHeight: 1.5 }}>{c.text}</p>
+                  <p style={{ margin: 0, fontSize: 13, color: "#1e1b4b", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{renderCommentText(c.text)}</p>
                 </div>
               ))}
               {dbComments.length === 0 && <p style={{ fontSize: 13, color: "#c7d2fe", textAlign: "center", marginTop: 16 }}>コメントはまだありません</p>}
