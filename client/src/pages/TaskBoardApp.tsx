@@ -269,7 +269,14 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
         </div>
         {chatMsg && <div style={{ margin: "6px 22px 0", padding: "6px 10px", background: chatMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: chatMsg.startsWith("✓") ? "#10b981" : "#ef4444", borderRadius: 8, fontSize: 12, fontWeight: 600 }}>{chatMsg}</div>}
         {/* Title */}
-        <h2 style={{ margin: "10px 22px 0", fontSize: 16, fontWeight: 800, color: "#1e1b4b" }}>{task.title}</h2>
+        <input
+          defaultValue={task.title}
+          onBlur={(e) => { if (e.target.value.trim() && e.target.value !== task.title) onUpdateField(task.id, "title", e.target.value.trim()); }}
+          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+          style={{ margin: "10px 22px 0", fontSize: 16, fontWeight: 800, color: "#1e1b4b", border: "none", borderBottom: "2px solid transparent", outline: "none", width: "calc(100% - 44px)", fontFamily: "'Noto Sans JP',sans-serif", background: "transparent", padding: "2px 0", borderRadius: 0 }}
+          onFocus={(e) => (e.target.style.borderBottomColor = "#6366f1")}
+          onBlurCapture={(e) => (e.target.style.borderBottomColor = "transparent")}
+        />
         {/* Fields */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "14px 22px 0" }}>
           {([["担当者", "assignee", members.map((m: string) => [m, m])], ["優先度", "priority", Object.entries(PRI).map(([k, v]) => [k, v.label])], ["ステータス", "colId", cols.map((c) => [c.id, c.title])], ["期限日", "due", null]] as [string, string, [string, string][] | null][]).map(([label, key, opts]) => (
