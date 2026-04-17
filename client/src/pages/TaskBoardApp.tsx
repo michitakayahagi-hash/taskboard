@@ -185,6 +185,7 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
 
   // Load comments from DB
   const commentsQuery = trpc.comment.list.useQuery({ taskId: task.id });
+  const deleteComment = trpc.comment.delete.useMutation({ onSuccess: () => commentsQuery.refetch() });
   // Load attachments from DB
   const attachmentsQuery = trpc.attachment.list.useQuery({ taskId: task.id });
   const attachments = attachmentsQuery.data || [];
@@ -367,10 +368,25 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
           ) : (
             <>
               {dbComments.map((c: any, i: number) => (
-                <div key={c.id || i} style={{ marginBottom: 10, background: "#f8f7ff", borderRadius: 10, padding: "10px 12px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <div key={c.id || i} style={{ marginBottom: 10, background: "#f8f7ff", borderRadius: 10, padding: "10px 12px", position: "relative" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                     <span style={{ fontWeight: 700, fontSize: 12, color: "#6366f1" }}>{c.author}</span>
-                    <span style={{ fontSize: 10, color: "#94a3b8" }}>{c.createdAt ? new Date(c.createdAt).toLocaleString("ja-JP") : ""}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 10, color: "#94a3b8" }}>{c.createdAt ? new Date(c.createdAt).toLocaleString("ja-JP") : ""}</span>
+                      {c.id != null && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm("このコメントを削除しますか？")) {
+                              deleteComment.mutate({ id: c.id });
+                            }
+                          }}
+                          title="削除"
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 13, padding: "0 2px", lineHeight: 1, display: "flex", alignItems: "center" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = "#94a3b8")}
+                        >🗑</button>
+                      )}
+                    </div>
                   </div>
                   <p style={{ margin: 0, fontSize: 13, color: "#1e1b4b", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{renderCommentText(c.text)}</p>
                 </div>

@@ -233,6 +233,12 @@ export const appRouter = router({
         await db.createComment(input);
         return { success: true };
       }),
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteComment(input.id);
+        return { success: true };
+      }),
   }),
 
   // ─── Import (Jooto CSV) ─────────────────────────────────────────────────

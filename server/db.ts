@@ -208,6 +208,12 @@ export async function createComment(data: InsertComment) {
   await db.insert(comments).values(data);
 }
 
+export async function deleteComment(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(comments).where(eq(comments.id, id));
+}
+
 // ─── Settings helpers ───────────────────────────────────────────────────────
 export async function getSetting(key: string): Promise<string | null> {
   const db = await getDb();
