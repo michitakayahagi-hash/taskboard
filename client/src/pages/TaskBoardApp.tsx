@@ -1015,8 +1015,10 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   const onCardClick = useCallback((task: TaskType) => { if (!dragRef.current.moved) setDetailTask(task); dragRef.current.moved = false; }, []);
 
   const saveTask = (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[] }) => {
+    // 新規タスクをsortOrder=-1で作成し、既存タスクを全て+1ずらして先頭に表示
     const colList = tasks.filter((t) => t.colId === form.colId);
-    createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, tags: form.tags, sortOrder: colList.length });
+    colList.forEach((t) => { updateTask.mutate({ id: t.id, sortOrder: t.sortOrder + 1 }); });
+    createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, tags: form.tags, sortOrder: 0 });
     setModal(null);
   };
 
