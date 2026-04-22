@@ -1211,7 +1211,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
         <button onClick={() => setShowSettings(true)} style={{ flexShrink: 0, background: webhookUrl ? "#f0fdf4" : "#f8f7ff", color: webhookUrl ? "#10b981" : "#94a3b8", border: `1.5px solid ${webhookUrl ? "#6ee7b7" : "#e0e7ff"}`, borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer" }}>⚙️</button>
         {canEdit && <button onClick={addCol} style={{ flexShrink: 0, background: "#fff", color: "#6366f1", border: "1.5px solid #6366f1", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>＋ 列</button>}
       </div>
-      <div style={{ padding: "18px 14px", display: "flex", gap: 14, overflowX: "auto", alignItems: "flex-start", WebkitOverflowScrolling: "touch", scrollSnapType: "x proximity", scrollBehavior: "smooth", scrollbarWidth: "none", msOverflowStyle: "none", flex: 1, minHeight: 0, paddingBottom: 24 } as React.CSSProperties} className="hide-scrollbar">
+      <div style={{ padding: "18px 14px", display: "flex", gap: 14, overflowX: "auto", alignItems: "flex-start", WebkitOverflowScrolling: "touch", scrollSnapType: "x proximity", scrollBehavior: "smooth", flex: 1, minHeight: 0, paddingBottom: 32 } as React.CSSProperties} className="board-scrollbar">
         {cols.map((col) => (
           <ColumnComp key={col.id} col={col} tasks={colTasks(col.id)} draggingId={draggingId} dropTarget={dropTarget} members={members}
             doneColIds={doneColIds}

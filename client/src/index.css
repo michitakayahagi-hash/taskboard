@@ -142,6 +142,26 @@
     scrollbar-width: none;
   }
 
+  /* ボードエリア用スクロールバー（常時表示） */
+  .board-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #a5b4fc #f1f5f9;
+  }
+  .board-scrollbar::-webkit-scrollbar {
+    height: 8px;
+  }
+  .board-scrollbar::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+  }
+  .board-scrollbar::-webkit-scrollbar-thumb {
+    background: #a5b4fc;
+    border-radius: 4px;
+  }
+  .board-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #6366f1;
+  }
+
   /**
    * Custom container utility that centers content and adds responsive padding.
    *
