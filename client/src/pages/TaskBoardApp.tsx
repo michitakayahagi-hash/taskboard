@@ -966,6 +966,21 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const dragRef = useRef({ active: false, taskId: "", moved: false, startX: 0, startY: 0 });
+  const boardScrollRef = useRef<HTMLDivElement | null>(null);
+  const [activeColIndex, setActiveColIndex] = useState(0);
+
+  // スクロールインジケーター更新
+  useEffect(() => {
+    const el = boardScrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const colWidth = el.scrollWidth / (cols.length || 1);
+      const idx = Math.round(el.scrollLeft / colWidth);
+      setActiveColIndex(Math.min(idx, cols.length - 1));
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [cols.length]);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressReadyRef = useRef(false); // 長押し完了フラグ
 
@@ -1211,7 +1226,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
         <button onClick={() => setShowSettings(true)} style={{ flexShrink: 0, background: webhookUrl ? "#f0fdf4" : "#f8f7ff", color: webhookUrl ? "#10b981" : "#94a3b8", border: `1.5px solid ${webhookUrl ? "#6ee7b7" : "#e0e7ff"}`, borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer" }}>⚙️</button>
         {canEdit && <button onClick={addCol} style={{ flexShrink: 0, background: "#fff", color: "#6366f1", border: "1.5px solid #6366f1", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>＋ 列</button>}
       </div>
-      <div style={{ padding: "18px 14px", display: "flex", gap: 14, overflowX: "auto", alignItems: "flex-start", WebkitOverflowScrolling: "touch", scrollSnapType: "x proximity", scrollBehavior: "smooth", flex: 1, minHeight: 0, paddingBottom: 32 } as React.CSSProperties} className="board-scrollbar">
+      <div ref={boardScrollRef} style={{ padding: "18px 14px", display: "flex", gap: 14, overflowX: "auto", alignItems: "flex-start", WebkitOverflowScrolling: "touch", scrollSnapType: "x proximity", scrollBehavior: "smooth", flex: 1, minHeight: 0, paddingBottom: 32 } as React.CSSProperties} className="board-scrollbar">
         {cols.map((col) => (
           <ColumnComp key={col.id} col={col} tasks={colTasks(col.id)} draggingId={draggingId} dropTarget={dropTarget} members={members}
             doneColIds={doneColIds}
@@ -1221,6 +1236,33 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
             onColDragStart={onColDragStart} onColDragOver={onColDragOver} onColDrop={onColDrop} colDraggingId={colDraggingId} />
         ))}
       </div>
+      {/* スクロールインジケーター（ドット）—スマホ向け */}
+      {cols.length > 1 && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, padding: "6px 0 10px", flexShrink: 0 }}>
+          {cols.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                const el = boardScrollRef.current;
+                if (!el) return;
+                const colWidth = el.scrollWidth / cols.length;
+                el.scrollTo({ left: colWidth * i, behavior: "smooth" });
+              }}
+              style={{
+                width: i === activeColIndex ? 20 : 8,
+                height: 8,
+                borderRadius: 4,
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+                background: i === activeColIndex ? "#6366f1" : "#c7d2fe",
+                transition: "width .25s, background .25s",
+                flexShrink: 0,
+              }}
+            />
+          ))}
+        </div>
+      )}
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} onClose={() => setModal(null)} onSave={saveTask} />}
       {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} memberIds={memberIds} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} />}
       {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} memberIds={memberIds} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isPublic={(project as any).isPublic ?? false} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
