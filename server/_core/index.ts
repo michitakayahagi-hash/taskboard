@@ -51,12 +51,15 @@ async function runMigrations() {
   try {
     const mysql2 = await import("mysql2/promise");
     const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
-    await conn.execute(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS isPublic BOOLEAN NOT NULL DEFAULT FALSE`);
-    console.log("[DB] projects.isPublic column ensured");
+    await conn.execute(`ALTER TABLE projects ADD COLUMN isPublic BOOLEAN NOT NULL DEFAULT FALSE`);
+    console.log("[DB] projects.isPublic column added");
     await conn.end();
   } catch (err: any) {
-    if (!err.message?.includes("Duplicate column")) {
-      console.error("[DB] isPublic column error:", err);
+    // errno 1060 = Duplicate column (already exists)
+    if (err.errno === 1060 || err.message?.includes("Duplicate column")) {
+      console.log("[DB] projects.isPublic column already exists");
+    } else {
+      console.error("[DB] isPublic column error:", err.message);
     }
   }
   // Ensure subtask_templates table exists
