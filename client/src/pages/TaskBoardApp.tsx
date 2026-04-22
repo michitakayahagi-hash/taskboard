@@ -639,26 +639,38 @@ function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserI
 
         {activeTab === "general" && (
           <>
+            {/* Webhook URL */}
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 6 }}>Google Chat Webhook URL</label>
+            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://chat.googleapis.com/v1/spaces/.../messages?key=..."
+              style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", boxSizing: "border-box", marginBottom: 16 }} />
             {/* Members */}
-            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 6 }}>メンバー管理</label>
-            <div style={{ marginBottom: 12 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>メンバー管理</label>
+            <p style={{ fontSize: 11, color: "#94a3b8", margin: "0 0 8px" }}>Google Chat ID を設定するとタスク作成時にメンション通知されます</p>
+            <div style={{ marginBottom: 4 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 4, marginBottom: 4 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "0 4px" }}>メンバー名</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "0 4px" }}>Google Chat ユーザーID</span>
+                <span></span>
+              </div>
               {localMembers.map((m, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 4, marginBottom: 6, alignItems: "center" }}>
                   <input value={m} onChange={(e) => { const nm = [...localMembers]; nm[i] = e.target.value; setLocalMembers(nm); }}
-                    style={{ flex: 1, border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
+                    style={{ border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
+                  <input value={localIds[m] || ""} onChange={(e) => setLocalIds({ ...localIds, [m]: e.target.value })} placeholder="例: 123456789"
+                    style={{ border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
                   <button onClick={() => { setLocalMembers(localMembers.filter((_, j) => j !== i)); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 16 }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
                 </div>
               ))}
-              <div style={{ display: "flex", gap: 6 }}>
+              <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
                 <input value={newMember} onChange={(e) => setNewMember(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addMember()} placeholder="新しいメンバー名"
                   style={{ flex: 1, border: "1.5px dashed #c7d2fe", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
                 <button onClick={addMember} style={{ background: "#ede9fe", color: "#6366f1", border: "none", borderRadius: 8, padding: "0 12px", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>追加</button>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
               <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
-              <button onClick={() => onSave("", localMembers, {})} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: "0 4px 12px rgba(99,102,241,.35)" }}>保存</button>
+              <button onClick={() => onSave(url, localMembers, localIds)} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: "0 4px 12px rgba(99,102,241,.35)" }}>保存</button>
             </div>
           </>
         )}
@@ -1015,10 +1027,25 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   const onCardClick = useCallback((task: TaskType) => { if (!dragRef.current.moved) setDetailTask(task); dragRef.current.moved = false; }, []);
 
   const saveTask = (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[] }) => {
-    // 新規タスクをsortOrder=-1で作成し、既存タスクを全て+1ずらして先頭に表示
+    // 新規タスクをsortOrder=0で作成し、既存タスクを全て+1ずらして先頭に表示
     const colList = tasks.filter((t) => t.colId === form.colId);
     colList.forEach((t) => { updateTask.mutate({ id: t.id, sortOrder: t.sortOrder + 1 }); });
     createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, tags: form.tags, sortOrder: 0 });
+    // Google Chat通知
+    if (webhookUrl && form.assignee) {
+      const assigneeId = memberIds[form.assignee];
+      const mention = assigneeId ? `<users/${assigneeId}> ` : `${form.assignee} `;
+      const colName = cols.find((c) => c.id === form.colId)?.title || "";
+      const chatText = `${mention}📋 新しいタスクが割り当てられました
+*${form.title}*
+📂 カラム: ${colName}${form.due ? `\n📅 期限: ${form.due}` : ""}
+🔗 ${window.location.origin}?project=${project.id}`;
+      fetch("/api/gchat-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webhookUrl, text: chatText }),
+      }).catch(() => {});
+    }
     setModal(null);
   };
 
