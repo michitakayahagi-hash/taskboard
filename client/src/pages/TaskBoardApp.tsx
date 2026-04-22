@@ -756,9 +756,9 @@ function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserI
 }
 
 /// ─── ProjectList ────────────────────────────────────────────────────────────
-function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete, onRename }: {
+function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete, onRename, onRefresh }: {
   projects: ProjectType[]; taskCounts: Record<string, { total: number; done: number; dueToday: number }>;
-  onSelect: (id: string) => void; onAdd: () => void; onImport: () => void; onDelete: (id: string) => void; onRename: (id: string, name: string) => void;
+  onSelect: (id: string) => void; onAdd: () => void; onImport: () => void; onDelete: (id: string) => void; onRename: (id: string, name: string) => void; onRefresh: () => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameVal, setNameVal] = useState("");
@@ -772,6 +772,9 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
           <span style={{ fontWeight: 800, fontSize: 15, color: "#1e1b4b" }}>TaskBoard</span>
         </div>
         <span style={{ fontSize: 13, color: "#94a3b8" }}>プロジェクト一覧</span>
+        <div style={{ flex: 1 }} />
+        <button onClick={onRefresh} title="更新" style={{ background: "#f8f7ff", color: "#6366f1", border: "1.5px solid #e0e7ff", borderRadius: 10, padding: "7px 12px", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontWeight: 700, fontFamily: "'Noto Sans JP',sans-serif", transition: "background .15s" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#f8f7ff")}>🔄</button>
       </div>
       <div style={{ padding: "32px 28px", maxWidth: 900, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28, gap: 12 }}>
@@ -1223,6 +1226,8 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
               onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#94a3b8")}>発退</button>
           </div>
         )}
+        <button onClick={() => { colsQuery.refetch(); tasksQuery.refetch(); }} title="更新" style={{ flexShrink: 0, background: "#f8f7ff", color: "#6366f1", border: "1.5px solid #e0e7ff", borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer", transition: "background .15s" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#f8f7ff")}>🔄</button>
         <button onClick={() => setShowSettings(true)} style={{ flexShrink: 0, background: webhookUrl ? "#f0fdf4" : "#f8f7ff", color: webhookUrl ? "#10b981" : "#94a3b8", border: `1.5px solid ${webhookUrl ? "#6ee7b7" : "#e0e7ff"}`, borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer" }}>⚙️</button>
         {canEdit && <button onClick={addCol} style={{ flexShrink: 0, background: "#fff", color: "#6366f1", border: "1.5px solid #6366f1", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>＋ 列</button>}
       </div>
@@ -1347,7 +1352,7 @@ export default function TaskBoardApp() {
 
   return (
     <>
-      <ProjectList projects={projects} taskCounts={taskCounts} onSelect={setCurrentProjectId} onAdd={() => setShowAddProject(true)} onImport={() => setShowImport(true)} onDelete={handleDelete} onRename={handleRename} />
+      <ProjectList projects={projects} taskCounts={taskCounts} onSelect={setCurrentProjectId} onAdd={() => setShowAddProject(true)} onImport={() => setShowImport(true)} onDelete={handleDelete} onRename={handleRename} onRefresh={() => { utils.project.list.invalidate(); utils.task.list.invalidate(); utils.column.list.invalidate(); }} />
       {showAddProject && <AddProjectModal onClose={() => setShowAddProject(false)} onSave={addProject} existingCount={projects.length} />}
       {showImport && <ImportModal onClose={() => { setShowImport(false); utils.project.list.invalidate(); }} onImported={(pid: string) => { setShowImport(false); utils.project.list.invalidate(); setCurrentProjectId(pid); }} />}
     </>
