@@ -59,7 +59,7 @@ export const tasks = mysqlTable("tasks", {
   priority: varchar("priority", { length: 20 }).notNull().default("medium"),
   due: varchar("due", { length: 20 }),
   tags: json("tags").$type<string[]>().notNull().default([]),
-  subtasks: json("subtasks").$type<{ id: number; text: string; done: boolean }[]>().notNull().default([]),
+  subtasks: json("subtasks").$type<{ id: number; text: string; done: boolean; assignee?: string; url?: string }[]>().notNull().default([]),
   description: text("description"),
   sortOrder: int("sortOrder").notNull().default(0),
   prevCol: varchar("prevCol", { length: 64 }),
