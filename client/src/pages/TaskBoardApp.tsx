@@ -1048,12 +1048,23 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
     // Google Chat通知
     if (webhookUrl && form.assignee) {
       const assigneeId = memberIds[form.assignee];
-      const mention = assigneeId ? `<users/${assigneeId}> ` : `${form.assignee} `;
+      const mention = assigneeId ? `<users/${assigneeId}>` : form.assignee;
       const colName = cols.find((c) => c.id === form.colId)?.title || "";
-      const chatText = `${mention}📋 新しいタスクが割り当てられました
-*${form.title}*
-📂 カラム: ${colName}${form.due ? `\n📅 期限: ${form.due}` : ""}
-🔗 ${window.location.origin}?project=${project.id}`;
+      const priorityLabel = form.priority === "high" ? "🔴 高" : form.priority === "medium" ? "🟡 中" : "🟢 低";
+      const chatText = [
+        `━━━━━━━━━━━━━━━━━━━━`,
+        `👤 *担当者：${form.assignee}* へのタスク通知`,
+        `━━━━━━━━━━━━━━━━━━━━`,
+        `📋 *${form.title}*`,
+        ``,
+        `📂 カラム：${colName}`,
+        `⚡ 優先度：${priorityLabel}`,
+        form.due ? `📅 期限：${form.due}` : null,
+        ``,
+        `${mention} タスクが割り当てられました`,
+        `🔗 ${window.location.origin}?project=${project.id}`,
+        `━━━━━━━━━━━━━━━━━━━━`,
+      ].filter(Boolean).join("\n");
       fetch("/api/gchat-send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
