@@ -53,7 +53,7 @@ function renderCommentText(text: string): React.ReactNode[] {
 
 // ─── 型定義 ──────────────────────────────────────────────────────────────────
 interface Col { id: string; title: string; color: string; sortOrder: number; }
-interface Subtask { id: number; text: string; done: boolean; assignee?: string; }
+interface Subtask { id: number; text: string; done: boolean; assignee?: string; url?: string; }
 interface CommentType { id?: number; author: string; text: string; createdAt?: Date | string; }
 interface TaskType {
   id: string; colId: string; sortOrder: number; title: string; assignee: string;
@@ -316,7 +316,11 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
                     </div>
                     <input type="checkbox" checked={s.done} onChange={() => { const ns = [...task.subtasks]; ns[i] = { ...s, done: !s.done }; onUpdateSubtasks(task.id, ns); }}
                       style={{ accentColor: "#6366f1", flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, color: s.done ? "#94a3b8" : "#1e1b4b", textDecoration: s.done ? "line-through" : "none", flex: 1 }}>{s.text}</span>
+                    <span style={{ fontSize: 13, color: s.done ? "#94a3b8" : "#1e1b4b", textDecoration: s.done ? "line-through" : "none", flex: 1 }}>
+                      {s.url ? (
+                        <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: s.done ? "#94a3b8" : "#6366f1", textDecoration: "underline", wordBreak: "break-all" }}>{s.text}</a>
+                      ) : s.text}
+                    </span>
                     <button onClick={() => onUpdateSubtasks(task.id, task.subtasks.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 14, flexShrink: 0 }}
                       onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
                   </div>
@@ -327,6 +331,16 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
                       <option value="">未設定</option>
                       {members.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: 32 }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>🔗</span>
+                    <input
+                      type="url"
+                      value={s.url || ""}
+                      onChange={(e) => { const ns = [...task.subtasks]; ns[i] = { ...s, url: e.target.value }; onUpdateSubtasks(task.id, ns); }}
+                      placeholder="URLを入力（任意）"
+                      style={{ flex: 1, fontSize: 11, border: "1px solid #e0e7ff", borderRadius: 6, padding: "2px 6px", color: "#1e1b4b", background: "#fff", fontFamily: "'Noto Sans JP',sans-serif", outline: "none" }}
+                    />
                   </div>
                 </div>
               ))}
