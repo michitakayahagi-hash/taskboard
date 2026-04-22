@@ -100,7 +100,7 @@ export const appRouter = router({
         return input;
       }),
     update: publicProcedure
-      .input(z.object({ id: z.string(), name: z.string().optional(), color: z.string().optional() }))
+      .input(z.object({ id: z.string(), name: z.string().optional(), color: z.string().optional(), isPublic: z.boolean().optional() }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
         await db.updateProject(id, data);
@@ -465,11 +465,21 @@ export const appRouter = router({
   // ─── Project Access Control ──────────────────────────────────────────
   projectAccess: router({
     // Check if a project has any members (i.e., access control is enabled)
+    // isPublic=true の場合はメンバーがいてもログイン不要
     hasRestriction: publicProcedure
       .input(z.object({ projectId: z.string() }))
       .query(async ({ input }) => {
+        const project = await db.getProjectById(input.projectId);
+        if (project?.isPublic) return { restricted: false };
         const restricted = await db.hasAnyMember(input.projectId);
         return { restricted };
+      }),
+    // Get isPublic status for a project
+    getPublicStatus: publicProcedure
+      .input(z.object({ projectId: z.string() }))
+      .query(async ({ input }) => {
+        const project = await db.getProjectById(input.projectId);
+        return { isPublic: project?.isPublic ?? false };
       }),
 
     // Get current session info for a project

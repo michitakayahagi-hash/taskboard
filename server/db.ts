@@ -66,6 +66,12 @@ export async function getUserByOpenId(openId: string) {
 }
 
 // ─── Project helpers ────────────────────────────────────────────────────────
+export async function getProjectById(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
 export async function getAllProjects() {
   const db = await getDb();
   if (!db) return [];

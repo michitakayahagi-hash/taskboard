@@ -25,6 +25,7 @@ export const projects = mysqlTable("projects", {
   id: varchar("id", { length: 64 }).primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   color: varchar("color", { length: 32 }).notNull().default("#6366f1"),
+  isPublic: boolean("isPublic").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

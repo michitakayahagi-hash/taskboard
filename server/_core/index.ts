@@ -47,6 +47,18 @@ async function runMigrations() {
   } catch (err) {
     console.error("[DB] attachments table error:", err);
   }
+  // Ensure isPublic column exists in projects table
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    await conn.execute(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS isPublic BOOLEAN NOT NULL DEFAULT FALSE`);
+    console.log("[DB] projects.isPublic column ensured");
+    await conn.end();
+  } catch (err: any) {
+    if (!err.message?.includes("Duplicate column")) {
+      console.error("[DB] isPublic column error:", err);
+    }
+  }
   // Ensure subtask_templates table exists
   try {
     const mysql2 = await import("mysql2/promise");

@@ -167,13 +167,14 @@ function DescriptionField({ task, onUpdateDescription }: { task: TaskType; onUpd
 }
 
 // ─── TaskDetailModal ────────────────────────────────────────────────────────────
-function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId, onClose, onAddComment, onUpdateSubtasks, onUpdateDescription, onUpdateField }: {
+function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId, onClose, onAddComment, onUpdateSubtasks, onUpdateDescription, onUpdateField, onDeleteTask }: {
   task: TaskType; cols: Col[]; webhookUrl: string; memberIds: Record<string, string>; members: string[]; projectId: string;
   onClose: () => void;
   onAddComment: (taskId: string, comment: CommentType) => void;
   onUpdateSubtasks: (taskId: string, subtasks: Subtask[]) => void;
   onUpdateDescription: (taskId: string, desc: string) => void;
   onUpdateField: (id: string, field: string, value: unknown) => void;
+  onDeleteTask?: (taskId: string) => void;
 }) {
   const [tab, setTab] = useState<"subtasks" | "comments" | "attachments">("subtasks");
   const [newSub, setNewSub] = useState("");
@@ -265,6 +266,20 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <button onClick={copyShareLink} title="共有リンクをコピー" style={{ background: "#ede9fe", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 14, color: "#6366f1" }}>🔗</button>
+            {onDeleteTask && (
+              <button
+                onClick={() => {
+                  if (window.confirm(`「${task.title}」を削除しますか？\nこの操作は元に戻せません。`)) {
+                    onDeleteTask(task.id);
+                    onClose();
+                  }
+                }}
+                title="タスクを削除"
+                style={{ background: "#fef2f2", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 14, color: "#ef4444" }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#fee2e2")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#fef2f2")}
+              >🗑</button>
+            )}
             <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#c7d2fe", lineHeight: "1" }}>×</button>
           </div>
         </div>
@@ -623,9 +638,10 @@ function AddProjectModal({ onClose, onSave, existingCount }: { onClose: () => vo
 }
 
 // ─── SettingsModal ────────────────────────────────────────────────────────────
-function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserIsAdmin, onSave, onClose }: {
+function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserIsAdmin, isPublic, onSave, onClose }: {
   webhookUrl: string; members: string[]; memberIds: Record<string, string>; projectId: string;
   currentUserIsAdmin?: boolean;
+  isPublic?: boolean;
   onSave: (url: string, members: string[], ids: Record<string, string>) => void; onClose: () => void;
 }) {
   const [url, setUrl] = useState(webhookUrl);
@@ -633,6 +649,9 @@ function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserI
   const [localIds, setLocalIds] = useState<Record<string, string>>(memberIds);
   const [newMember, setNewMember] = useState("");
   const [activeTab, setActiveTab] = useState<"general" | "access">("general");
+  const [localIsPublic, setLocalIsPublic] = useState<boolean>(isPublic ?? false);
+  const updateProject = trpc.project.update.useMutation();
+  const [publicSaved, setPublicSaved] = useState(false);
   const addMember = () => { if (newMember.trim() && !localMembers.includes(newMember.trim())) { setLocalMembers([...localMembers, newMember.trim()]); setNewMember(""); } };
   const tabStyle = (active: boolean) => ({
     padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
@@ -691,6 +710,40 @@ function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserI
 
         {activeTab === "access" && (
           <>
+            {/* 公開/非公開トグル */}
+            <div style={{ background: localIsPublic ? "#f0fdf4" : "#fef2f2", border: `1.5px solid ${localIsPublic ? "#6ee7b7" : "#fca5a5"}`, borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: localIsPublic ? "#10b981" : "#ef4444", marginBottom: 4 }}>
+                    {localIsPublic ? "🔓 公開中" : "🔒 非公開"}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>
+                    {localIsPublic ? "ログイン不要で誰でも閲覧可能" : "アクセス制限あり（メンバーのみ）"}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const newVal = !localIsPublic;
+                    setLocalIsPublic(newVal);
+                    updateProject.mutate({ id: projectId, isPublic: newVal }, {
+                      onSuccess: () => { setPublicSaved(true); setTimeout(() => setPublicSaved(false), 2000); }
+                    });
+                  }}
+                  style={{
+                    width: 52, height: 28, borderRadius: 14, border: "none", cursor: "pointer",
+                    background: localIsPublic ? "#10b981" : "#e0e7ff",
+                    position: "relative", transition: "background .2s", flexShrink: 0,
+                  }}
+                >
+                  <div style={{
+                    position: "absolute", top: 4, left: localIsPublic ? 28 : 4,
+                    width: 20, height: 20, borderRadius: "50%", background: "#fff",
+                    boxShadow: "0 1px 4px rgba(0,0,0,.2)", transition: "left .2s",
+                  }} />
+                </button>
+              </div>
+              {publicSaved && <div style={{ marginTop: 8, fontSize: 11, color: "#10b981", fontWeight: 700 }}>✓ 保存しました</div>}
+            </div>
             <ProjectMemberSettings projectId={projectId} currentUserIsAdmin={currentUserIsAdmin} />
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
               <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>閉じる</button>
@@ -869,6 +922,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
     onSettled: () => utils.task.list.invalidate({ projectId: project.id }),
   });
   const createComment = trpc.comment.create.useMutation({ onSuccess: (_d, vars) => utils.comment.list.invalidate({ taskId: vars.taskId }) });
+  const deleteTask = trpc.task.delete.useMutation({ onSuccess: () => utils.task.list.invalidate({ projectId: project.id }) });
   const setSetting = trpc.setting.set.useMutation({ onSuccess: () => { utils.setting.get.invalidate(); } });
 
   const [modal, setModal] = useState<{ defaultCol: string } | null>(null);
@@ -1168,8 +1222,8 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
         ))}
       </div>
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} onClose={() => setModal(null)} onSave={saveTask} />}
-      {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} memberIds={memberIds} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} />}
-      {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} memberIds={memberIds} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
+      {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} memberIds={memberIds} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} />}
+      {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} memberIds={memberIds} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isPublic={(project as any).isPublic ?? false} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
     </div>
   );
 }
