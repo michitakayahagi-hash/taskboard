@@ -167,6 +167,7 @@ export const appRouter = router({
         subtasks: z.array(z.object({ id: z.number(), text: z.string(), done: z.boolean() })).default([]),
         description: z.string().nullable().optional(),
         sortOrder: z.number().default(0),
+        createdBy: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         await db.createTask(input);

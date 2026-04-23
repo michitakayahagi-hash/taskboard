@@ -59,6 +59,7 @@ interface TaskType {
   id: string; colId: string; sortOrder: number; title: string; assignee: string;
   priority: string; due: string | null; tags: string[]; subtasks: Subtask[];
   description: string | null; prevCol?: string | null; projectId: string;
+  createdBy?: string | null;
 }
 interface ProjectType { id: string; name: string; color: string; }
 
@@ -309,6 +310,12 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
           ))}
         </div>
         <TagEditor tags={task.tags || []} onUpdate={(tags) => onUpdateField(task.id, "tags", tags)} />
+        {task.createdBy && (
+          <div style={{ padding: "4px 22px 0", display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600 }}>👤 作成者:</span>
+            <span style={{ fontSize: 11, color: "#6366f1", fontWeight: 700 }}>{task.createdBy}</span>
+          </div>
+        )}
         <DescriptionField task={task} onUpdateDescription={onUpdateDescription} />
         {/* Tabs */}
         <div style={{ display: "flex", borderBottom: "1.5px solid #f0f0ff", flexShrink: 0 }}>
@@ -587,7 +594,7 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
 }
 
 // ─── AddTaskModal ─────────────────────────────────────────────────────────────
-function AddTaskModal({ defaultCol, cols, members, onClose, onSave }: { defaultCol: string; cols: Col[]; members: string[]; onClose: () => void; onSave: (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[] }) => void }) {
+function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave }: { defaultCol: string; cols: Col[]; members: string[]; currentUser?: string; onClose: () => void; onSave: (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[]; createdBy?: string }) => void }) {
   const [form, setForm] = useState({ title: "", colId: defaultCol || cols[0]?.id || "", assignee: members[0] || "", priority: "medium", due: "", tags: [] as string[] });
   const [tagInput, setTagInput] = useState("");
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
@@ -628,7 +635,7 @@ function AddTaskModal({ defaultCol, cols, members, onClose, onSave }: { defaultC
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
-          <button onClick={() => form.title.trim() && onSave(form)} style={{ background: form.title.trim() ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: form.title.trim() ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: form.title.trim() ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
+          <button onClick={() => form.title.trim() && onSave({ ...form, createdBy: currentUser || undefined })} style={{ background: form.title.trim() ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: form.title.trim() ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: form.title.trim() ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
         </div>
       </div>
     </div>
@@ -1145,11 +1152,11 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
 
   const onCardClick = useCallback((task: TaskType) => { if (!dragRef.current.moved) setDetailTask(task); dragRef.current.moved = false; }, []);
 
-  const saveTask = (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[] }) => {
+  const saveTask = (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[]; createdBy?: string }) => {
     // 新規タスクをsortOrder=0で作成し、既存タスクを全て+1ずらして先頭に表示
     const colList = tasks.filter((t) => t.colId === form.colId);
     colList.forEach((t) => { updateTask.mutate({ id: t.id, sortOrder: t.sortOrder + 1 }); });
-    createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, tags: form.tags, sortOrder: 0 });
+    createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, tags: form.tags, sortOrder: 0, createdBy: form.createdBy || undefined });
     // Google Chat通知
     if (webhookUrl && form.assignee) {
       const assigneeId = memberIds[form.assignee];
@@ -1308,7 +1315,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
           ))}
         </div>
       )}
-      {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} onClose={() => setModal(null)} onSave={saveTask} />}
+      {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} currentUser={projectSession?.name || members[0] || ""} onClose={() => setModal(null)} onSave={saveTask} />}
       {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} memberIds={memberIds} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} />}
       {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} memberIds={memberIds} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isPublic={(project as any).isPublic ?? false} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
     </div>

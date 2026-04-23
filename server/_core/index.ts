@@ -62,6 +62,20 @@ async function runMigrations() {
       console.error("[DB] isPublic column error:", err.message);
     }
   }
+  // Ensure createdBy column exists in tasks table
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    await conn.execute(`ALTER TABLE tasks ADD COLUMN createdBy VARCHAR(100)`);
+    console.log("[DB] tasks.createdBy column added");
+    await conn.end();
+  } catch (err: any) {
+    if (err.errno === 1060 || err.message?.includes("Duplicate column")) {
+      console.log("[DB] tasks.createdBy column already exists");
+    } else {
+      console.error("[DB] createdBy column error:", err.message);
+    }
+  }
   // Ensure subtask_templates table exists
   try {
     const mysql2 = await import("mysql2/promise");

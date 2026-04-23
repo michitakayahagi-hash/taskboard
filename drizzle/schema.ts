@@ -64,6 +64,7 @@ export const tasks = mysqlTable("tasks", {
   description: text("description"),
   sortOrder: int("sortOrder").notNull().default(0),
   prevCol: varchar("prevCol", { length: 64 }),
+  createdBy: varchar("createdBy", { length: 100 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
