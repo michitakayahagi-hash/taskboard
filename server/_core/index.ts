@@ -209,4 +209,82 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+// ─── 毎朝9時：期限超過タスクをGoogle Chatに通知 ──────────────────────────────
+async function sendOverdueNotifications() {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+
+    // 完了カラムのIDを取得
+    const [doneCols] = await conn.execute("SELECT id FROM `columns` WHERE title = '完了'") as any[];
+    const doneColIds: string[] = doneCols.map((c: any) => c.id);
+
+    // 今日の日付（YYYY-MM-DD）
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 期限超過タスクを取得（完了カラム以外、期日が今日より前）
+    let query = "SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN `columns` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE t.due IS NOT NULL AND t.due < ?";
+    const params: any[] = [today];
+    if (doneColIds.length > 0) {
+      query += ` AND t.colId NOT IN (${doneColIds.map(() => '?').join(',')})`;
+      params.push(...doneColIds);
+    }
+    const [overdueTasks] = await conn.execute(query, params) as any[];
+
+    if (overdueTasks.length === 0) {
+      await conn.end();
+      return;
+    }
+
+    // WebhookURLを取得
+    const [webhookRows] = await conn.execute("SELECT value FROM settings WHERE `key` = 'webhook_url'") as any[];
+    const webhookUrl = webhookRows[0]?.value;
+    if (!webhookUrl) {
+      await conn.end();
+      return;
+    }
+
+    // 通知メッセージを作成
+    const lines = [
+      `🚨 *期限超過タスク通知* （${today}時点）`,
+      `⚠️ 以下の ${overdueTasks.length} 件のタスクが期限を過ぎています。`,
+      "",
+    ];
+    for (const t of overdueTasks) {
+      lines.push(`📋 *${t.title}*`);
+      lines.push(`  📁 ${t.projectName || "不明"} ／ 🗂 ${t.colTitle || "不明"}`);
+      lines.push(`  👤 担当: ${t.assignee || "未設定"} ／ 📅 期限: ${t.due}`);
+      lines.push("");
+    }
+    const text = lines.join("\n");
+
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    console.log(`[Overdue] ${overdueTasks.length}件の期限超過タスクを通知しました`);
+    await conn.end();
+  } catch (err) {
+    console.error("[Overdue] 通知エラー:", err);
+  }
+}
+
+function scheduleOverdueNotifications() {
+  const now = new Date();
+  // 日本時間9:00 = UTC 0:00
+  const nextRun = new Date();
+  nextRun.setUTCHours(0, 0, 0, 0);
+  if (nextRun <= now) nextRun.setUTCDate(nextRun.getUTCDate() + 1);
+  const delay = nextRun.getTime() - now.getTime();
+  setTimeout(() => {
+    sendOverdueNotifications();
+    setInterval(sendOverdueNotifications, 24 * 60 * 60 * 1000);
+  }, delay);
+  console.log(`[Overdue] 次回通知: ${nextRun.toISOString()}（${Math.round(delay / 60000)}分後）`);
+}
+
+startServer().then(() => {
+  scheduleOverdueNotifications();
+}).catch(console.error);
