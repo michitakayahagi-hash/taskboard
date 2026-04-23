@@ -53,7 +53,7 @@ function renderCommentText(text: string): React.ReactNode[] {
 
 // ─── 型定義 ──────────────────────────────────────────────────────────────────
 interface Col { id: string; title: string; color: string; sortOrder: number; }
-interface Subtask { id: number; text: string; done: boolean; assignee?: string; url?: string; }
+interface Subtask { id: number; text: string; done: boolean; assignee?: string; url?: string; due?: string; }
 interface CommentType { id?: number; author: string; text: string; createdAt?: Date | string; }
 interface TaskType {
   id: string; colId: string; sortOrder: number; title: string; assignee: string;
@@ -178,6 +178,8 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
 }) {
   const [tab, setTab] = useState<"subtasks" | "comments" | "attachments">("subtasks");
   const [newSub, setNewSub] = useState("");
+  const [editingSubId, setEditingSubId] = useState<number | null>(null);
+  const [editingSubText, setEditingSubText] = useState("");
   const [commentText, setCommentText] = useState("");
   const [sender, setSender] = useState(members[0] || "");
   const [sending, setSending] = useState(false);
@@ -331,11 +333,20 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
                     </div>
                     <input type="checkbox" checked={s.done} onChange={() => { const ns = [...task.subtasks]; ns[i] = { ...s, done: !s.done }; onUpdateSubtasks(task.id, ns); }}
                       style={{ accentColor: "#6366f1", flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, color: s.done ? "#94a3b8" : "#1e1b4b", textDecoration: s.done ? "line-through" : "none", flex: 1 }}>
-                      {s.url ? (
-                        <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: s.done ? "#94a3b8" : "#6366f1", textDecoration: "underline", wordBreak: "break-all" }}>{s.text}</a>
-                      ) : s.text}
-                    </span>
+                    {editingSubId === s.id ? (
+                      <input autoFocus value={editingSubText} onChange={(e) => setEditingSubText(e.target.value)}
+                        onBlur={() => { const ns = [...task.subtasks]; ns[i] = { ...s, text: editingSubText || s.text }; onUpdateSubtasks(task.id, ns); setEditingSubId(null); }}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { const ns = [...task.subtasks]; ns[i] = { ...s, text: editingSubText || s.text }; onUpdateSubtasks(task.id, ns); setEditingSubId(null); } }}
+                        style={{ flex: 1, fontSize: 13, border: "1.5px solid #6366f1", borderRadius: 6, padding: "2px 6px", outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
+                    ) : (
+                      <span onClick={() => { setEditingSubId(s.id); setEditingSubText(s.text); }}
+                        title="クリックで編集"
+                        style={{ fontSize: 13, color: s.done ? "#94a3b8" : "#1e1b4b", textDecoration: s.done ? "line-through" : "none", flex: 1, cursor: "text", minWidth: 0, wordBreak: "break-all" }}>
+                        {s.url ? (
+                          <a href={s.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: s.done ? "#94a3b8" : "#6366f1", textDecoration: "underline", wordBreak: "break-all" }}>{s.text}</a>
+                        ) : s.text}
+                      </span>
+                    )}
                     <button onClick={() => onUpdateSubtasks(task.id, task.subtasks.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 14, flexShrink: 0 }}
                       onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
                   </div>
@@ -356,6 +367,22 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
                       placeholder="URLを入力（任意）"
                       style={{ flex: 1, fontSize: 11, border: "1px solid #e0e7ff", borderRadius: 6, padding: "2px 6px", color: "#1e1b4b", background: "#fff", fontFamily: "'Noto Sans JP',sans-serif", outline: "none" }}
                     />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: 32 }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>📅 期日:</span>
+                    <input
+                      type="date"
+                      value={s.due || ""}
+                      onChange={(e) => { const ns = [...task.subtasks]; ns[i] = { ...s, due: e.target.value || undefined }; onUpdateSubtasks(task.id, ns); }}
+                      style={{ fontSize: 11, border: "1px solid #e0e7ff", borderRadius: 6, padding: "2px 6px", color: s.due ? "#1e1b4b" : "#94a3b8", background: "#fff", fontFamily: "'Noto Sans JP',sans-serif", outline: "none", cursor: "pointer" }}
+                    />
+                    {s.due && (() => {
+                      const today = new Date().toISOString().slice(0, 10);
+                      const isOverdue = s.due < today && !s.done;
+                      const isToday = s.due === today && !s.done;
+                      return isOverdue ? <span style={{ fontSize: 10, color: "#ef4444", fontWeight: 700 }}>期限超過</span>
+                        : isToday ? <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>今日まで</span> : null;
+                    })()}
                   </div>
                 </div>
               ))}
