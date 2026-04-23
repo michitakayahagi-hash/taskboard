@@ -181,7 +181,7 @@ export const appRouter = router({
         priority: z.string().optional(),
         due: z.string().nullable().optional(),
         tags: z.array(z.string()).optional(),
-        subtasks: z.array(z.object({ id: z.number(), text: z.string(), done: z.boolean(), assignee: z.string().optional(), url: z.string().optional() })).optional(),
+        subtasks: z.array(z.object({ id: z.number(), text: z.string(), done: z.boolean(), assignee: z.string().optional(), url: z.string().optional(), due: z.string().optional() })).optional(),
         description: z.string().nullable().optional(),
         sortOrder: z.number().optional(),
         prevCol: z.string().nullable().optional(),
