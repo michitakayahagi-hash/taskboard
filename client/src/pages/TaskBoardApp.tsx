@@ -1020,9 +1020,18 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   const colTasks = (colId: string) => {
     const list = filtered.filter((t) => t.colId === colId);
     // 完了カラムは新しい順（sortOrder降順）、それ以外は昇順
-    return doneColIds.includes(colId)
-      ? list.sort((a, b) => b.sortOrder - a.sortOrder)
-      : list.sort((a, b) => a.sortOrder - b.sortOrder);
+    if (doneColIds.includes(colId)) {
+      return list.sort((a, b) => b.sortOrder - a.sortOrder);
+    }
+    // 完了以外：期限超過を最優先、その後sortOrder昇順
+    const today = new Date().toISOString().slice(0, 10);
+    const isOverdue = (t: TaskType) => !!t.due && t.due < today;
+    return list.sort((a, b) => {
+      const aOver = isOverdue(a) ? 0 : 1;
+      const bOver = isOverdue(b) ? 0 : 1;
+      if (aOver !== bOver) return aOver - bOver;
+      return a.sortOrder - b.sortOrder;
+    });
   };
 
   const addCol = () => {
