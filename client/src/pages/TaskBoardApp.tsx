@@ -1297,13 +1297,29 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
       createCol.mutate(
         { id: newDoneColId, projectId: project.id, title: "完了", color: "#10b981", sortOrder: cols.length },
         { onSuccess: () => {
-          updateTask.mutate({ id: task.id, colId: newDoneColId, prevCol: task.colId });
+          // 完了カラムの既存タスクの最大sortOrderを取得して+1（一番上＝最大値）
+          const doneTasks = utils.task.list.getData({ projectId: project.id })?.filter((t: any) => t.colId === newDoneColId) || [];
+          const maxOrder = doneTasks.length > 0 ? Math.max(...doneTasks.map((t: any) => t.sortOrder)) : 0;
+          // 楽観的にUIを即更新
+          utils.task.list.setData({ projectId: project.id }, (old: any) =>
+            old ? old.map((t: any) => t.id === task.id ? { ...t, colId: newDoneColId, prevCol: task.colId, sortOrder: maxOrder + 1 } : t) : old
+          );
+          updateTask.mutate({ id: task.id, colId: newDoneColId, prevCol: task.colId, sortOrder: maxOrder + 1 });
         }}
       );
       return;
     }
-    updateTask.mutate({ id: task.id, colId: doneCol.id, prevCol: task.colId });
-  }, [cols, project]);
+    // 完了カラムの既存タスクの最大sortOrderを取得して+1（一番上＝最大値）
+    const doneTasks = utils.task.list.getData({ projectId: project.id })?.filter((t: any) => t.colId === doneCol.id) || [];
+    const maxOrder = doneTasks.length > 0 ? Math.max(...doneTasks.map((t: any) => t.sortOrder)) : 0;
+    const newSortOrder = maxOrder + 1;
+    // 楽観的にUIを即更新（完了カラムに移動＋sortOrder更新）
+    utils.task.list.setData({ projectId: project.id }, (old: any) =>
+      old ? old.map((t: any) => t.id === task.id ? { ...t, colId: doneCol.id, prevCol: task.colId, sortOrder: newSortOrder } : t) : old
+    );
+    // サーバーに保存（バックグラウンド）
+    updateTask.mutate({ id: task.id, colId: doneCol.id, prevCol: task.colId, sortOrder: newSortOrder });
+  }, [cols, project, utils]);
 
   const onRevert = useCallback((task: TaskType) => {
     updateTask.mutate({ id: task.id, colId: task.prevCol || "todo", prevCol: null });
