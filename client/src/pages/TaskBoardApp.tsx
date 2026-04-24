@@ -652,9 +652,24 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(col.title);
+  const [sortByDue, setSortByDue] = useState(false);
   const isOver = dropTarget?.col === col.id;
   const insertIdx = isOver ? dropTarget!.index : -1;
   const isColDragging = colDraggingId === col.id;
+  const isDoneCol = doneColIds.includes(col.id);
+
+  // 期限順ソート（表示のみ・DBは変更しない）
+  const displayTasks = sortByDue && !isDoneCol ? [...tasks].sort((a, b) => {
+    const todayMs = new Date(new Date().toDateString()).getTime();
+    const aOver = a.due && new Date(a.due.replace(/\//g, "-")).getTime() < todayMs ? 0 : 1;
+    const bOver = b.due && new Date(b.due.replace(/\//g, "-")).getTime() < todayMs ? 0 : 1;
+    if (aOver !== bOver) return aOver - bOver;
+    // 期限なしは最後
+    if (!a.due && !b.due) return 0;
+    if (!a.due) return 1;
+    if (!b.due) return -1;
+    return a.due.replace(/\//g, "-").localeCompare(b.due.replace(/\//g, "-"));
+  }) : tasks;
   return (
     <div ref={colRef}
       onDragOver={(e) => { e.preventDefault(); onColDragOver(col.id); }}
@@ -670,14 +685,27 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
             style={{ flex: 1, fontWeight: 800, fontSize: 13, color: "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif", border: "1.5px solid #6366f1", borderRadius: 6, padding: "1px 6px", outline: "none" }} />
           : <span onClick={() => setEditingTitle(true)} title="クリックで編集" style={{ fontWeight: 800, fontSize: 13, color: "#1e1b4b", flex: 1, fontFamily: "'Noto Sans JP',sans-serif", letterSpacing: 0.3, cursor: "text" }}>{col.title}</span>}
         <span style={{ background: col.color + "22", color: col.color, fontSize: 11, fontWeight: 700, borderRadius: 20, padding: "2px 9px" }}>{tasks.length}</span>
+        {!isDoneCol && (
+          <button
+            onClick={() => setSortByDue((v) => !v)}
+            title={sortByDue ? "期限順（クリックで解除）" : "期限日付順に並び替え"}
+            style={{ background: sortByDue ? "#6366f1" : "none", border: sortByDue ? "none" : "none", cursor: "pointer", color: sortByDue ? "#fff" : "#c7d2fe", fontSize: 13, padding: sortByDue ? "2px 5px" : "0 2px", lineHeight: "1", borderRadius: 6, flexShrink: 0, fontWeight: 700, transition: "background .15s,color .15s" }}
+            onMouseEnter={(e) => { if (!sortByDue) e.currentTarget.style.color = "#6366f1"; }}
+            onMouseLeave={(e) => { if (!sortByDue) e.currentTarget.style.color = "#c7d2fe"; }}>
+            📅
+          </button>
+        )}
         {col.title !== "完了" && (
           <button onClick={() => onDeleteCol(col.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 14, padding: 0, lineHeight: "1" }}
             onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
         )}
       </div>
+      {sortByDue && !isDoneCol && (
+        <div style={{ fontSize: 10, color: "#6366f1", fontWeight: 700, marginBottom: 6, textAlign: "center", background: "#ede9fe", borderRadius: 6, padding: "2px 0" }}>📅 期限日付順</div>
+      )}
       <div style={{ flex: 1, overflowY: "auto", paddingRight: 2 }}>
         {insertIdx === 0 && <DropLine />}
-        {tasks.map((task, i) => (
+        {displayTasks.map((task, i) => (
           <div key={task.id} ref={(el) => { cardRefs.current[task.id] = el; }}>
             <TaskCard task={task} dragging={draggingId === task.id} members={members} doneColIds={doneColIds} onPointerDown={onPointerDown} onClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={onComment} onUpdateField={onUpdateField} />
             {insertIdx === i + 1 && <DropLine />}
