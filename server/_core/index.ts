@@ -76,6 +76,20 @@ async function runMigrations() {
       console.error("[DB] createdBy column error:", err.message);
     }
   }
+  // Ensure webhookUrl column exists in projects table
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    await conn.execute(`ALTER TABLE projects ADD COLUMN webhookUrl TEXT`);
+    console.log("[DB] projects.webhookUrl column added");
+    await conn.end();
+  } catch (err: any) {
+    if (err.errno === 1060 || err.message?.includes("Duplicate column")) {
+      console.log("[DB] projects.webhookUrl column already exists");
+    } else {
+      console.error("[DB] webhookUrl column error:", err.message);
+    }
+  }
   // Ensure subtask_templates table exists
   try {
     const mysql2 = await import("mysql2/promise");
@@ -237,34 +251,46 @@ async function sendOverdueNotifications() {
       return;
     }
 
-    // WebhookURLを取得
-    const [webhookRows] = await conn.execute("SELECT value FROM settings WHERE `key` = 'webhook_url'") as any[];
-    const webhookUrl = webhookRows[0]?.value;
-    if (!webhookUrl) {
-      await conn.end();
-      return;
+    // プロジェクト別にWebhook URLを取得
+    const projectIds = [...new Set(overdueTasks.map((t: any) => t.projectId))] as string[];
+    const webhookMap: Record<string, string> = {};
+    for (const pid of projectIds) {
+      const [rows] = await conn.execute("SELECT value FROM settings WHERE `settingKey` = ?", [`webhook_url_${pid}`]) as any[];
+      if (rows[0]?.value) webhookMap[pid] = rows[0].value;
     }
 
-    // 通知メッセージを作成
-    const lines = [
-      `🚨 *期限超過タスク通知* （${today}時点）`,
-      `⚠️ 以下の ${overdueTasks.length} 件のタスクが期限を過ぎています。`,
-      "",
-    ];
+    // プロジェクト別にグループ化して送信
+    const tasksByProject: Record<string, any[]> = {};
     for (const t of overdueTasks) {
-      lines.push(`📋 *${t.title}*`);
-      lines.push(`  📁 ${t.projectName || "不明"} ／ 🗂 ${t.colTitle || "不明"}`);
-      lines.push(`  👤 担当: ${t.assignee || "未設定"} ／ 📅 期限: ${t.due}`);
-      lines.push("");
+      if (!tasksByProject[t.projectId]) tasksByProject[t.projectId] = [];
+      tasksByProject[t.projectId].push(t);
     }
-    const text = lines.join("\n");
 
-    await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    console.log(`[Overdue] ${overdueTasks.length}件の期限超過タスクを通知しました`);
+    let totalSent = 0;
+    for (const [pid, ptasks] of Object.entries(tasksByProject)) {
+      const webhookUrl = webhookMap[pid];
+      if (!webhookUrl) continue;
+      const lines = [
+        `🚨 *期限超過タスク通知* （${today}時点）`,
+        `📁 *${ptasks[0].projectName || pid}*`,
+        `⚠️ 以下の ${ptasks.length} 件のタスクが期限を過ぎています。`,
+        "",
+      ];
+      for (const t of ptasks) {
+        lines.push(`📋 *${t.title}*`);
+        lines.push(`  🗂 ${t.colTitle || "不明"}`);
+        lines.push(`  👤 担当: ${t.assignee || "未設定"} ／ 📅 期限: ${t.due}`);
+        lines.push("");
+      }
+      const text = lines.join("\n");
+      await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      totalSent += ptasks.length;
+    }
+    console.log(`[Overdue] ${totalSent}件の期限超過タスクを通知しました`);
     await conn.end();
   } catch (err) {
     console.error("[Overdue] 通知エラー:", err);

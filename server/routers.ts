@@ -100,7 +100,7 @@ export const appRouter = router({
         return input;
       }),
     update: publicProcedure
-      .input(z.object({ id: z.string(), name: z.string().optional(), color: z.string().optional(), isPublic: z.boolean().optional() }))
+      .input(z.object({ id: z.string(), name: z.string().optional(), color: z.string().optional(), isPublic: z.boolean().optional(), webhookUrl: z.string().optional().nullable() }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
         await db.updateProject(id, data);

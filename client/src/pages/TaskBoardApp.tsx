@@ -232,8 +232,7 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
     if (sendToChat && webhookUrl) {
       setSending(true);
       try {
-        const assigneeId = memberIds[task.assignee];
-        const mention = assigneeId ? `<users/${assigneeId}> ` : "";
+        const mention = "";
         const shareUrl = `${window.location.origin}?project=${projectId}&task=${task.id}`;
         const chatText = `${mention}📋 *${task.title}*\n💬 ${sender}: ${commentText.trim()}\n🔗 ${shareUrl}`;
         const resp = await fetch("/api/gchat-send", {
@@ -672,15 +671,14 @@ function AddProjectModal({ onClose, onSave, existingCount }: { onClose: () => vo
 }
 
 // ─── SettingsModal ────────────────────────────────────────────────────────────
-function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserIsAdmin, isPublic, onSave, onClose }: {
-  webhookUrl: string; members: string[]; memberIds: Record<string, string>; projectId: string;
+function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isPublic, onSave, onClose }: {
+  webhookUrl: string; members: string[]; projectId: string;
   currentUserIsAdmin?: boolean;
   isPublic?: boolean;
-  onSave: (url: string, members: string[], ids: Record<string, string>) => void; onClose: () => void;
+  onSave: (url: string, members: string[]) => void; onClose: () => void;
 }) {
   const [url, setUrl] = useState(webhookUrl);
   const [localMembers, setLocalMembers] = useState<string[]>(members);
-  const [localIds, setLocalIds] = useState<Record<string, string>>(memberIds);
   const [newMember, setNewMember] = useState("");
   const [activeTab, setActiveTab] = useState<"general" | "access">("general");
   const [localIsPublic, setLocalIsPublic] = useState<boolean>(isPublic ?? false);
@@ -711,20 +709,12 @@ function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserI
             <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://chat.googleapis.com/v1/spaces/.../messages?key=..."
               style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", boxSizing: "border-box", marginBottom: 16 }} />
             {/* Members */}
-            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>メンバー管理</label>
-            <p style={{ fontSize: 11, color: "#94a3b8", margin: "0 0 8px" }}>Google Chat ID を設定するとタスク作成時にメンション通知されます</p>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 8 }}>メンバー管理</label>
             <div style={{ marginBottom: 4 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 4, marginBottom: 4 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "0 4px" }}>メンバー名</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "0 4px" }}>Google Chat ユーザーID</span>
-                <span></span>
-              </div>
               {localMembers.map((m, i) => (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 4, marginBottom: 6, alignItems: "center" }}>
+                <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
                   <input value={m} onChange={(e) => { const nm = [...localMembers]; nm[i] = e.target.value; setLocalMembers(nm); }}
-                    style={{ border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
-                  <input value={localIds[m] || ""} onChange={(e) => setLocalIds({ ...localIds, [m]: e.target.value })} placeholder="例: 123456789"
-                    style={{ border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
+                    style={{ flex: 1, border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
                   <button onClick={() => { setLocalMembers(localMembers.filter((_, j) => j !== i)); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 16 }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
                 </div>
@@ -737,7 +727,7 @@ function SettingsModal({ webhookUrl, members, memberIds, projectId, currentUserI
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
               <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
-              <button onClick={() => onSave(url, localMembers, localIds)} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: "0 4px 12px rgba(99,102,241,.35)" }}>保存</button>
+              <button onClick={() => onSave(url, localMembers)} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: "0 4px 12px rgba(99,102,241,.35)" }}>保存</button>
             </div>
           </>
         )}
@@ -929,15 +919,13 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   // DB queries
   const colsQuery = trpc.column.list.useQuery({ projectId: project.id });
   const tasksQuery = trpc.task.list.useQuery({ projectId: project.id });
-  const webhookQuery = trpc.setting.get.useQuery({ key: "webhook_url" });
+  const webhookQuery = trpc.setting.get.useQuery({ key: `webhook_url_${project.id}` });
   const membersQuery = trpc.setting.get.useQuery({ key: `members_${project.id}` });
-  const memberIdsQuery = trpc.setting.get.useQuery({ key: `member_ids_${project.id}` });
 
   const cols: Col[] = (colsQuery.data || []).map((c: any) => ({ id: c.id, title: c.title, color: c.color, sortOrder: c.sortOrder }));
   const tasks: TaskType[] = (tasksQuery.data || []).map((t: any) => ({ ...t, tags: t.tags || [], subtasks: t.subtasks || [] }));
   const webhookUrl = webhookQuery.data?.value || "";
   const members: string[] = useMemo(() => { try { return JSON.parse(membersQuery.data?.value || "null") || DEFAULT_MEMBERS; } catch { return DEFAULT_MEMBERS; } }, [membersQuery.data]);
-  const memberIds: Record<string, string> = useMemo(() => { try { return JSON.parse(memberIdsQuery.data?.value || "{}"); } catch { return {}; } }, [memberIdsQuery.data]);
 
   // Mutations
   const createCol = trpc.column.create.useMutation({ onSuccess: () => utils.column.list.invalidate({ projectId: project.id }) });
@@ -1159,8 +1147,6 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
     createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, tags: form.tags, sortOrder: 0, createdBy: form.createdBy || undefined });
     // Google Chat通知
     if (webhookUrl && form.assignee) {
-      const assigneeId = memberIds[form.assignee];
-      const mention = assigneeId ? `<users/${assigneeId}>` : form.assignee;
       const colName = cols.find((c) => c.id === form.colId)?.title || "";
       const priorityLabel = form.priority === "high" ? "🔴 高" : form.priority === "medium" ? "🟡 中" : "🟢 低";
       const chatText = [
@@ -1173,7 +1159,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
         `⚡ 優先度：${priorityLabel}`,
         form.due ? `📅 期限：${form.due}` : null,
         ``,
-        `${mention} タスクが割り当てられました`,
+        `${form.assignee} タスクが割り当てられました`,
         `🔗 ${window.location.origin}?project=${project.id}`,
         `━━━━━━━━━━━━━━━━━━━━`,
       ].filter(Boolean).join("\n");
@@ -1224,10 +1210,9 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
     updateTask.mutate({ id: task.id, colId: task.prevCol || "todo", prevCol: null });
   }, []);
 
-  const handleSaveSettings = (url: string, newMembers: string[], ids: Record<string, string>) => {
-    setSetting.mutate({ key: "webhook_url", value: url });
+  const handleSaveSettings = (url: string, newMembers: string[]) => {
+    setSetting.mutate({ key: `webhook_url_${project.id}`, value: url });
     setSetting.mutate({ key: `members_${project.id}`, value: JSON.stringify(newMembers) });
-    setSetting.mutate({ key: `member_ids_${project.id}`, value: JSON.stringify(ids) });
     setShowSettings(false);
   };
 
@@ -1317,7 +1302,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
       )}
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} currentUser={projectSession?.name || members[0] || ""} onClose={() => setModal(null)} onSave={saveTask} />}
       {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} memberIds={memberIds} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} />}
-      {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} memberIds={memberIds} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isPublic={(project as any).isPublic ?? false} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isPublic={(project as any).isPublic ?? false} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
     </div>
   );
 }
