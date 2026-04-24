@@ -8,6 +8,7 @@ import { trpc } from "@/lib/trpc";
 import ImportModal from "./ImportModal";
 import { ProjectLoginModal, ProjectMemberSettings } from "./ProjectAccessModal";
 import { SubtaskTemplatePanel } from "@/features/SubtaskTemplatePanel";
+import HelpModal from "./HelpModal";
 
 // ─── 定数 ────────────────────────────────────────────────────────────────────
 const PRI: Record<string, { label: string; color: string }> = {
@@ -1113,6 +1114,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   };
   const [detailTask, setDetailTask] = useState<TaskType | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   // URLパラメータからタスクを自動オープン
   useEffect(() => {
@@ -1419,6 +1421,8 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
             await utils.task.list.invalidate({ projectId: project.id });
           }} title="更新" style={{ flexShrink: 0, background: "#f8f7ff", color: "#6366f1", border: "1.5px solid #e0e7ff", borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer", transition: "background .15s" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#f8f7ff")}>🔄</button>
+        <button onClick={() => setShowHelp(true)} title="使い方" style={{ flexShrink: 0, background: "#f8f7ff", color: "#6366f1", border: "1.5px solid #e0e7ff", borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer", fontWeight: 800 }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#f8f7ff")}>?</button>
         <button onClick={() => setShowSettings(true)} style={{ flexShrink: 0, background: webhookUrl ? "#f0fdf4" : "#f8f7ff", color: webhookUrl ? "#10b981" : "#94a3b8", border: `1.5px solid ${webhookUrl ? "#6ee7b7" : "#e0e7ff"}`, borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer" }}>⚙️</button>
         {canEdit && <button onClick={addCol} style={{ flexShrink: 0, background: "#fff", color: "#6366f1", border: "1.5px solid #6366f1", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>＋ 列</button>}
       </div>
@@ -1462,6 +1466,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} currentUser={projectSession?.name || members[0] || ""} onClose={() => setModal(null)} onSave={saveTask} />}
       {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} />}
       {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isPublic={(project as any).isPublic ?? false} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </div>
   );
 }
