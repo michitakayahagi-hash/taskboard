@@ -1024,8 +1024,12 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
       return list.sort((a, b) => b.sortOrder - a.sortOrder);
     }
     // 完了以外：期限超過を最優先、その後sortOrder昇順
-    const today = new Date().toISOString().slice(0, 10);
-    const isOverdue = (t: TaskType) => !!t.due && t.due < today;
+    const todayMs = new Date(new Date().toDateString()).getTime();
+    const isOverdue = (t: TaskType) => {
+      if (!t.due) return false;
+      const d = new Date(t.due.replace(/\//g, "-"));
+      return !isNaN(d.getTime()) && d.getTime() < todayMs;
+    };
     return list.sort((a, b) => {
       const aOver = isOverdue(a) ? 0 : 1;
       const bOver = isOverdue(b) ? 0 : 1;
