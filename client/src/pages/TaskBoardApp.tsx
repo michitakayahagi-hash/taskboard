@@ -73,6 +73,97 @@ function reorder(tasks: TaskType[], dragId: string, targetCol: string, targetInd
   return [...rest, ...reassigned];
 }
 
+// ─── CustomDatePicker ────────────────────────────────────────────────────────
+function CustomDatePicker({ value, onChange, style }: { value: string; onChange: (v: string) => void; style?: React.CSSProperties }) {
+  const [open, setOpen] = useState(false);
+  const [viewYear, setViewYear] = useState(() => {
+    const d = value ? new Date(value.replace(/\//g, "-")) : new Date();
+    return isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
+  });
+  const [viewMonth, setViewMonth] = useState(() => {
+    const d = value ? new Date(value.replace(/\//g, "-")) : new Date();
+    return isNaN(d.getTime()) ? new Date().getMonth() : d.getMonth();
+  });
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const parsed = value ? new Date(value.replace(/\//g, "-")) : null;
+  const selYear = parsed && !isNaN(parsed.getTime()) ? parsed.getFullYear() : null;
+  const selMonth = parsed && !isNaN(parsed.getTime()) ? parsed.getMonth() : null;
+  const selDay = parsed && !isNaN(parsed.getTime()) ? parsed.getDate() : null;
+
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+  const today = new Date();
+  const todayY = today.getFullYear(), todayM = today.getMonth(), todayD = today.getDate();
+
+  const select = (day: number) => {
+    const mm = String(viewMonth + 1).padStart(2, "0");
+    const dd = String(day).padStart(2, "0");
+    onChange(`${viewYear}-${mm}-${dd}`);
+    setOpen(false);
+  };
+
+  const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); } else setViewMonth(m => m - 1); };
+  const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); } else setViewMonth(m => m + 1); };
+
+  const displayVal = value ? value.replace(/-/g, "/") : "";
+  const DOW = ["日", "月", "火", "水", "木", "金", "土"];
+  const MONTHS = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+
+  return (
+    <div ref={ref} style={{ position: "relative", flex: 1, minWidth: 0, ...style }}>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        onPointerDown={(e) => e.stopPropagation()}
+        style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: value ? "#1e1b4b" : "#94a3b8", background: "#f8f7ff", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 4 }}>
+        <span>📅</span>
+        <span>{displayVal || "年/月/日"}</span>
+      </button>
+      {open && (
+        <div onPointerDown={(e) => e.stopPropagation()} style={{ position: "absolute", zIndex: 9999, top: "calc(100% + 4px)", left: 0, background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(99,102,241,.18)", border: "1.5px solid #e0e7ff", padding: "10px 12px", minWidth: 220 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <button type="button" onClick={prevMonth} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#6366f1", padding: "0 4px" }}>‹</button>
+            <span style={{ fontWeight: 700, fontSize: 13, color: "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif" }}>{viewYear}年 {MONTHS[viewMonth]}</span>
+            <button type="button" onClick={nextMonth} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#6366f1", padding: "0 4px" }}>›</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4 }}>
+            {DOW.map((d, i) => <div key={d} style={{ textAlign: "center", fontSize: 10, fontWeight: 700, color: i === 0 ? "#ef4444" : i === 6 ? "#3b82f6" : "#64748b", padding: "2px 0" }}>{d}</div>)}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+            {Array.from({ length: firstDow }).map((_, i) => <div key={"e" + i} />)}
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const day = i + 1;
+              const isSelected = selYear === viewYear && selMonth === viewMonth && selDay === day;
+              const isToday = todayY === viewYear && todayM === viewMonth && todayD === day;
+              const dow = (firstDow + i) % 7;
+              return (
+                <button key={day} type="button" onClick={() => select(day)}
+                  style={{ textAlign: "center", fontSize: 11, padding: "4px 0", borderRadius: 6, border: "none", cursor: "pointer", fontWeight: isSelected || isToday ? 700 : 400, background: isSelected ? "#6366f1" : isToday ? "#ede9fe" : "transparent", color: isSelected ? "#fff" : dow === 0 ? "#ef4444" : dow === 6 ? "#3b82f6" : "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif" }}>
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, borderTop: "1px solid #e0e7ff", paddingTop: 6 }}>
+            <button type="button" onClick={() => { onChange(""); setOpen(false); }} style={{ fontSize: 11, color: "#ef4444", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>削除</button>
+            <button type="button" onClick={() => { const t = new Date(); select(t.getDate()); setViewYear(t.getFullYear()); setViewMonth(t.getMonth()); }} style={{ fontSize: 11, color: "#6366f1", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", fontWeight: 700 }}>今日</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── tiny UI ─────────────────────────────────────────────────────────────────
 function Avatar({ name, size = 26 }: { name: string; size?: number }) {
   const bg = ["#6366f1", "#f59e0b", "#10b981", "#8b5cf6", "#ef4444"][name.charCodeAt(0) % 5];
@@ -168,8 +259,8 @@ function DescriptionField({ task, onUpdateDescription }: { task: TaskType; onUpd
 }
 
 // ─── TaskDetailModal ────────────────────────────────────────────────────────────
-function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId, onClose, onAddComment, onUpdateSubtasks, onUpdateDescription, onUpdateField, onDeleteTask }: {
-  task: TaskType; cols: Col[]; webhookUrl: string; memberIds: Record<string, string>; members: string[]; projectId: string;
+function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, onAddComment, onUpdateSubtasks, onUpdateDescription, onUpdateField, onDeleteTask }: {
+  task: TaskType; cols: Col[]; webhookUrl: string; members: string[]; projectId: string;
   onClose: () => void;
   onAddComment: (taskId: string, comment: CommentType) => void;
   onUpdateSubtasks: (taskId: string, subtasks: Subtask[]) => void;
@@ -304,7 +395,7 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
                 ? <select value={(task as any)[key] || ""} onChange={(e) => onUpdateField(task.id, key, e.target.value)} style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff" }}>
                   {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
-                : <input type="date" value={(task as any)[key] || ""} onChange={(e) => onUpdateField(task.id, key, e.target.value)} style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />}
+                : <CustomDatePicker value={(task as any)[key] || ""} onChange={(v) => onUpdateField(task.id, key, v)} style={{ flex: "none", width: "100%" }} />}
             </div>
           ))}
         </div>
@@ -376,12 +467,7 @@ function TaskDetailModal({ task, cols, webhookUrl, memberIds, members, projectId
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: 32 }}>
                     <span style={{ fontSize: 11, color: "#94a3b8" }}>📅 期日:</span>
-                    <input
-                      type="date"
-                      value={s.due || ""}
-                      onChange={(e) => { const ns = [...task.subtasks]; ns[i] = { ...s, due: e.target.value || undefined }; onUpdateSubtasks(task.id, ns); }}
-                      style={{ fontSize: 11, border: "1px solid #e0e7ff", borderRadius: 6, padding: "2px 6px", color: s.due ? "#1e1b4b" : "#94a3b8", background: "#fff", fontFamily: "'Noto Sans JP',sans-serif", outline: "none", cursor: "pointer" }}
-                    />
+                    <CustomDatePicker value={s.due || ""} onChange={(v) => { const ns = [...task.subtasks]; ns[i] = { ...s, due: v || undefined }; onUpdateSubtasks(task.id, ns); }} />
                     {s.due && (() => {
                       const today = new Date().toISOString().slice(0, 10);
                       const isOverdue = s.due < today && !s.done;
@@ -517,7 +603,7 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
         <select value={task.assignee} onChange={(e) => onUpdateField(task.id, "assignee", e.target.value)} style={{ border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff", cursor: "pointer", maxWidth: 120, minWidth: 0, flex: "0 1 auto" }}>
           {members.map((m: string) => <option key={m}>{m}</option>)}
         </select>
-        <input type="date" value={task.due || ""} onChange={(e) => onUpdateField(task.id, "due", e.target.value)} style={{ border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: overdue ? "#ef4444" : "#64748b", background: "#f8f7ff", cursor: "pointer", flex: 1, minWidth: 0 }} />
+        <CustomDatePicker value={task.due || ""} onChange={(v) => onUpdateField(task.id, "due", v)} />
       </div>
       <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
         <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onComment(task); }} style={{ fontSize: 11, fontWeight: 700, color: "#1877F2", background: "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: 8, padding: "4px 9px", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", flexShrink: 0 }}>💬 コメント</button>
@@ -615,7 +701,7 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
                 ? <select value={(form as any)[key] || ""} onChange={(e) => set(key, e.target.value)} style={{ width: "100%", border: "2px solid #e0e7ff", borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#fff" }}>
                   {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
-                : <input type="date" value={(form as any)[key] || ""} onChange={(e) => set(key, e.target.value)} style={{ width: "100%", border: "2px solid #e0e7ff", borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />}
+                : <CustomDatePicker value={(form as any)[key] || ""} onChange={(v) => set(key, v)} style={{ flex: "none", width: "100%" }} />}
             </div>
           ))}
         </div>
@@ -1314,7 +1400,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
         </div>
       )}
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} currentUser={projectSession?.name || members[0] || ""} onClose={() => setModal(null)} onSave={saveTask} />}
-      {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} memberIds={memberIds} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} />}
+      {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} />}
       {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isPublic={(project as any).isPublic ?? false} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
     </div>
   );
