@@ -579,12 +579,28 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
     <div onPointerDown={(e) => onPointerDown(e, task)} onClick={() => onClick(task)}
       style={{ background: dragging ? "#f0f0ff" : isDone ? "#f3f4f6" : overdue ? "#fff5f5" : "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, boxShadow: dragging ? "0 0 0 2px #6366f1, 0 8px 24px rgba(99,102,241,.2)" : isDone ? "none" : overdue ? "0 0 0 2px #ef4444, 0 2px 8px rgba(239,68,68,.18)" : "0 1px 4px rgba(99,102,241,.08)", borderLeft: isDone ? "3px solid #d1d5db" : overdue ? "4px solid #ef4444" : `3px solid ${p.color}`, cursor: dragging ? "grabbing" : "grab", opacity: isDone ? 0.6 : dragging ? 0.4 : 1, transition: "box-shadow .12s,opacity .12s,background .12s", touchAction: "pan-y" }}>
       <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: isDone ? "#9ca3af" : overdue ? "#b91c1c" : "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif", lineHeight: 1.4, textDecoration: isDone ? "line-through" : "none" }}>{overdue && <span style={{ marginRight: 4 }}>🚨</span>}{task.title}</p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: task.due ? 4 : 8 }}>
         <span style={{ background: p.color + "18", color: p.color, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20 }}>{p.label}</span>
-        {task.due && <span style={{ fontSize: 10, color: overdue ? "#ef4444" : "#64748b", fontWeight: 600, padding: "2px 6px", borderRadius: 20, background: overdue ? "#fef2f2" : "#f1f5f9" }}>📅 {task.due}</span>}
         {(task.tags || []).map((t) => <span key={t} style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20 }}>{t}</span>)}
         <InlineTagInput onAdd={(tag) => { if (tag && !(task.tags || []).includes(tag)) onUpdateField(task.id, "tags", [...(task.tags || []), tag]); }} />
       </div>
+      {task.due && (() => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const dueStr = task.due.replace(/\//g, "-");
+        const isToday = dueStr === todayStr && !isDone;
+        return (
+          <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{
+              fontSize: 13, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
+              background: isDone ? "#f3f4f6" : overdue ? "#ef4444" : isToday ? "#f59e0b" : "#f1f5f9",
+              color: isDone ? "#9ca3af" : overdue ? "#fff" : isToday ? "#fff" : "#475569",
+              letterSpacing: 0.3,
+            }}>📅 {task.due}</span>
+            {overdue && !isDone && <span style={{ fontSize: 11, fontWeight: 700, color: "#ef4444" }}>期限超過</span>}
+            {isToday && <span style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b" }}>今日まで</span>}
+          </div>
+        );
+      })()}
       {(task.subtasks || []).length > 0 && (() => {
         const done = (task.subtasks || []).filter((s) => s.done).length;
         const total = (task.subtasks || []).length;
