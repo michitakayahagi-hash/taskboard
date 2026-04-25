@@ -179,6 +179,12 @@ async function startServer() {
       res.status(400).json({ error: "webhookUrl and text are required" });
       return;
     }
+    // 土日（0=日曜、6=土曜）は通知をスキップ
+    const dayOfWeek = new Date().getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      res.json({ success: true, skipped: true, reason: "weekend" });
+      return;
+    }
     try {
       const response = await fetch(webhookUrl, {
         method: "POST",
@@ -223,9 +229,15 @@ async function startServer() {
   });
 }
 
-// ─── 毎朝9時：期限超過タスクをGoogle Chatに通知 ──────────────────────────────
+// ─── 毎朝9時：期限超過タスクをGoogle Chatに通知 ──────────────────────────────────────────────
 async function sendOverdueNotifications() {
   if (!process.env.DATABASE_URL) return;
+  // 土日（0=日曜、6=土曜）は通知をスキップ
+  const dow = new Date().getDay();
+  if (dow === 0 || dow === 6) {
+    console.log("[Overdue] 土日のため通知をスキップ");
+    return;
+  }
   try {
     const mysql2 = await import("mysql2/promise");
     const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
