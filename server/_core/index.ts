@@ -179,8 +179,10 @@ async function startServer() {
       res.status(400).json({ error: "webhookUrl and text are required" });
       return;
     }
-    // 土日（0=日曜、6=土曜）は通知をスキップ
-    const dayOfWeek = new Date().getDay();
+    // 土日（0=日曜、6=土曜）は通知をスキップ（JST基準）
+    const jstOffset = 9 * 60 * 60 * 1000;
+    const jstNow = new Date(Date.now() + jstOffset);
+    const dayOfWeek = jstNow.getUTCDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) {
       res.json({ success: true, skipped: true, reason: "weekend" });
       return;
@@ -232,8 +234,10 @@ async function startServer() {
 // ─── 毎朝9時：期限超過タスクをGoogle Chatに通知 ──────────────────────────────────────────────
 async function sendOverdueNotifications() {
   if (!process.env.DATABASE_URL) return;
-  // 土日（0=日曜、6=土曜）は通知をスキップ
-  const dow = new Date().getDay();
+  // 土日（0=日曜、6=土曜）は通知をスキップ（JST基準）
+  const jstOffset = 9 * 60 * 60 * 1000;
+  const jstNow = new Date(Date.now() + jstOffset);
+  const dow = jstNow.getUTCDay();
   if (dow === 0 || dow === 6) {
     console.log("[Overdue] 土日のため通知をスキップ");
     return;
