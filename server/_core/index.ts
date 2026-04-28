@@ -247,66 +247,93 @@ async function sendOverdueNotifications() {
     const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
 
     // 完了カラムのIDを取得
-    const [doneCols] = await conn.execute("SELECT id FROM `columns` WHERE title = '完了'") as any[];
+    const [doneCols] = await conn.execute("SELECT id FROM `columns` WHERE title = '\u5b8c\u4e86'") as any[];
     const doneColIds: string[] = doneCols.map((c: any) => c.id);
 
-    // 今日の日付（YYYY-MM-DD）
-    const today = new Date().toISOString().slice(0, 10);
+    // 今日の日付（YYYY-MM-DD）→ JST基準
+    const jstToday = new Date(Date.now() + jstOffset).toISOString().slice(0, 10);
+
+    const doneExclude = doneColIds.length > 0
+      ? ` AND t.colId NOT IN (${doneColIds.map(() => '?').join(',')})`
+      : "";
 
     // 期限超過タスクを取得（完了カラム以外、期日が今日より前）
-    let query = "SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN `columns` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE t.due IS NOT NULL AND t.due < ?";
-    const params: any[] = [today];
-    if (doneColIds.length > 0) {
-      query += ` AND t.colId NOT IN (${doneColIds.map(() => '?').join(',')})`;
-      params.push(...doneColIds);
-    }
-    const [overdueTasks] = await conn.execute(query, params) as any[];
+    const overdueQuery = `SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN \`columns\` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE t.due IS NOT NULL AND t.due < ?${doneExclude}`;
+    const overdueParams: any[] = [jstToday, ...doneColIds];
+    const [overdueTasks] = await conn.execute(overdueQuery, overdueParams) as any[];
 
-    if (overdueTasks.length === 0) {
+    // 期限未設定タスクを取得（完了カラム以外、dueがNULLまたは空文字）
+    const noDueQuery = `SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN \`columns\` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE (t.due IS NULL OR t.due = '')${doneExclude}`;
+    const noDueParams: any[] = [...doneColIds];
+    const [noDueTasks] = await conn.execute(noDueQuery, noDueParams) as any[];
+
+    if (overdueTasks.length === 0 && noDueTasks.length === 0) {
       await conn.end();
       return;
     }
 
     // プロジェクト別にWebhook URLを取得
-    const projectIds = [...new Set(overdueTasks.map((t: any) => t.projectId))] as string[];
+    const allTasks = [...overdueTasks, ...noDueTasks];
+    const projectIds = [...new Set(allTasks.map((t: any) => t.projectId))] as string[];
     const webhookMap: Record<string, string> = {};
     for (const pid of projectIds) {
       const [rows] = await conn.execute("SELECT value FROM settings WHERE `settingKey` = ?", [`webhook_url_${pid}`]) as any[];
       if (rows[0]?.value) webhookMap[pid] = rows[0].value;
     }
 
-    // プロジェクト別にグループ化して送信
-    const tasksByProject: Record<string, any[]> = {};
+    // プロジェクト別にグループ化
+    const overdueByProject: Record<string, any[]> = {};
     for (const t of overdueTasks) {
-      if (!tasksByProject[t.projectId]) tasksByProject[t.projectId] = [];
-      tasksByProject[t.projectId].push(t);
+      if (!overdueByProject[t.projectId]) overdueByProject[t.projectId] = [];
+      overdueByProject[t.projectId].push(t);
+    }
+    const noDueByProject: Record<string, any[]> = {};
+    for (const t of noDueTasks) {
+      if (!noDueByProject[t.projectId]) noDueByProject[t.projectId] = [];
+      noDueByProject[t.projectId].push(t);
     }
 
     let totalSent = 0;
-    for (const [pid, ptasks] of Object.entries(tasksByProject)) {
+    for (const pid of projectIds) {
       const webhookUrl = webhookMap[pid];
       if (!webhookUrl) continue;
-      const lines = [
-        `🚨 *期限超過タスク通知* （${today}時点）`,
-        `📁 *${ptasks[0].projectName || pid}*`,
-        `⚠️ 以下の ${ptasks.length} 件のタスクが期限を過ぎています。`,
+      const ptasksOverdue = overdueByProject[pid] || [];
+      const ptasksNoDue = noDueByProject[pid] || [];
+      const projectName = (ptasksOverdue[0] || ptasksNoDue[0])?.projectName || pid;
+
+      const lines: string[] = [
+        `🚨 *タスク確認通知* （${jstToday}時点）`,
+        `📁 *${projectName}*`,
         "",
       ];
-      for (const t of ptasks) {
-        lines.push(`📋 *${t.title}*`);
-        lines.push(`  🗂 ${t.colTitle || "不明"}`);
-        lines.push(`  👤 担当: ${t.assignee || "未設定"} ／ 📅 期限: ${t.due}`);
+
+      if (ptasksOverdue.length > 0) {
+        lines.push(`⚠️ *期限超過: ${ptasksOverdue.length}件*`);
+        for (const t of ptasksOverdue) {
+          lines.push(`📋 ${t.title}`);
+          lines.push(`  🗂 ${t.colTitle || "不明"} ｜ 👤 ${t.assignee || "担当未設定"} ｜ 📅 ${t.due}`);
+        }
         lines.push("");
       }
+
+      if (ptasksNoDue.length > 0) {
+        lines.push(`🗓 *期限未設定: ${ptasksNoDue.length}件*`);
+        for (const t of ptasksNoDue) {
+          lines.push(`📋 ${t.title}`);
+          lines.push(`  🗂 ${t.colTitle || "不明"} ｜ 👤 ${t.assignee || "担当未設定"}`);
+        }
+        lines.push("");
+      }
+
       const text = lines.join("\n");
       await fetch(webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      totalSent += ptasks.length;
+      totalSent += ptasksOverdue.length + ptasksNoDue.length;
     }
-    console.log(`[Overdue] ${totalSent}件の期限超過タスクを通知しました`);
+    console.log(`[Overdue] 期限超過${overdueTasks.length}件・期限未設定${noDueTasks.length}件を通知しました`);
     await conn.end();
   } catch (err) {
     console.error("[Overdue] 通知エラー:", err);
