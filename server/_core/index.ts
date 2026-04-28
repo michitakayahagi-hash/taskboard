@@ -258,7 +258,7 @@ async function sendOverdueNotifications() {
       : "";
 
     // 期限超過タスクを取得（完了カラム以外、期日が今日より前）
-    const overdueQuery = `SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN \`columns\` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE t.due IS NOT NULL AND t.due < ?${doneExclude}`;
+    const overdueQuery = `SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN \`columns\` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE t.due IS NOT NULL AND t.due != '' AND t.due < ?${doneExclude}`;
     const overdueParams: any[] = [jstToday, ...doneColIds];
     const [overdueTasks] = await conn.execute(overdueQuery, overdueParams) as any[];
 
