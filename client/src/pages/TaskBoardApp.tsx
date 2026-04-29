@@ -77,6 +77,7 @@ function reorder(tasks: TaskType[], dragId: string, targetCol: string, targetInd
 // ─── CustomDatePicker ────────────────────────────────────────────────────────
 function CustomDatePicker({ value, onChange, style }: { value: string; onChange: (v: string) => void; style?: React.CSSProperties }) {
   const [open, setOpen] = useState(false);
+  const [calPos, setCalPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [viewYear, setViewYear] = useState(() => {
     const d = value ? new Date(value.replace(/\//g, "-")) : new Date();
     return isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
@@ -86,14 +87,23 @@ function CustomDatePicker({ value, onChange, style }: { value: string; onChange:
     return isNaN(d.getTime()) ? new Date().getMonth() : d.getMonth();
   });
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const handler = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      // カレンダーポップアップ自体はdocument直下のportalなのでrefで判定できない
+      // data属性で判定
+      if ((target as HTMLElement).closest?.('[data-datepicker-popup]')) return;
+      if (ref.current && !ref.current.contains(target)) setOpen(false);
     };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("touchstart", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
   }, [open]);
 
   const parsed = value ? new Date(value.replace(/\//g, "-")) : null;
@@ -123,15 +133,29 @@ function CustomDatePicker({ value, onChange, style }: { value: string; onChange:
   return (
     <div ref={ref} style={{ position: "relative", flex: 1, minWidth: 0, ...style }}>
       <button
+        ref={btnRef}
         type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!open && btnRef.current) {
+            const rect = btnRef.current.getBoundingClientRect();
+            const calW = 240;
+            let left = rect.left;
+            if (left + calW > window.innerWidth - 8) left = window.innerWidth - calW - 8;
+            if (left < 8) left = 8;
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const top = spaceBelow >= 280 ? rect.bottom + 4 : rect.top - 284;
+            setCalPos({ top, left });
+          }
+          setOpen(o => !o);
+        }}
         onPointerDown={(e) => e.stopPropagation()}
         style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: value ? "#1e1b4b" : "#94a3b8", background: "#f8f7ff", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 4 }}>
         <span>📅</span>
         <span>{displayVal || "年/月/日"}</span>
       </button>
       {open && (
-        <div onPointerDown={(e) => e.stopPropagation()} style={{ position: "absolute", zIndex: 9999, top: "calc(100% + 4px)", left: 0, background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(99,102,241,.18)", border: "1.5px solid #e0e7ff", padding: "10px 12px", minWidth: 220 }}>
+        <div data-datepicker-popup onPointerDown={(e) => e.stopPropagation()} style={{ position: "fixed", zIndex: 99999, top: calPos.top, left: calPos.left, background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(99,102,241,.28)", border: "1.5px solid #e0e7ff", padding: "10px 12px", minWidth: 240 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <button type="button" onClick={prevMonth} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#6366f1", padding: "0 4px" }}>‹</button>
             <span style={{ fontWeight: 700, fontSize: 13, color: "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif" }}>{viewYear}年 {MONTHS[viewMonth]}</span>
