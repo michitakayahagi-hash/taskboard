@@ -246,15 +246,24 @@ async function sendOverdueNotifications() {
     const mysql2 = await import("mysql2/promise");
     const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
 
-    // 完了カラムのIDを取得
+    // 完了・日々作業カラムのIDを取得（通知除外対象）
     const [doneCols] = await conn.execute("SELECT id FROM `columns` WHERE title = '\u5b8c\u4e86'") as any[];
     const doneColIds: string[] = doneCols.map((c: any) => c.id);
+    const [dailyCols] = await conn.execute("SELECT id FROM `columns` WHERE title = '\u65e5\u3005\u4f5c\u696d'") as any[];
+    const dailyColIds: string[] = dailyCols.map((c: any) => c.id);
 
     // 今日の日付（YYYY-MM-DD）→ JST基準
     const jstToday = new Date(Date.now() + jstOffset).toISOString().slice(0, 10);
 
+    // 期限超過通知の除外カラム：完了のみ
     const doneExclude = doneColIds.length > 0
       ? ` AND t.colId NOT IN (${doneColIds.map(() => '?').join(',')})`
+      : "";
+
+    // 期限未設定通知の除外カラム：完了＋日々作業
+    const allExcludeIds = [...doneColIds, ...dailyColIds];
+    const allExclude = allExcludeIds.length > 0
+      ? ` AND t.colId NOT IN (${allExcludeIds.map(() => '?').join(',')})`
       : "";
 
     // 期限超過タスクを取得（完了カラム以外、期日が今日より前）
@@ -262,9 +271,9 @@ async function sendOverdueNotifications() {
     const overdueParams: any[] = [jstToday, ...doneColIds];
     const [overdueTasks] = await conn.execute(overdueQuery, overdueParams) as any[];
 
-    // 期限未設定タスクを取得（完了カラム以外、dueがNULLまたは空文字）
-    const noDueQuery = `SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN \`columns\` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE (t.due IS NULL OR t.due = '')${doneExclude}`;
-    const noDueParams: any[] = [...doneColIds];
+    // 期限未設定タスクを取得（完了・日々作業カラム以外、dueがNULLまたは空文字）
+    const noDueQuery = `SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN \`columns\` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE (t.due IS NULL OR t.due = '')${allExclude}`;
+    const noDueParams: any[] = [...allExcludeIds];
     const [noDueTasks] = await conn.execute(noDueQuery, noDueParams) as any[];
 
     if (overdueTasks.length === 0 && noDueTasks.length === 0) {
