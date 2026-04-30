@@ -139,16 +139,15 @@ function CustomDatePicker({ value, onChange, style }: { value: string; onChange:
           e.stopPropagation();
           if (!open && btnRef.current) {
             const rect = btnRef.current.getBoundingClientRect();
-            const calW = 260;
-            const vw = document.documentElement.clientWidth || window.innerWidth;
-            const vh = document.documentElement.clientHeight || window.innerHeight;
+            const vw = Math.min(document.documentElement.clientWidth, window.innerWidth);
+            const vh = Math.min(document.documentElement.clientHeight, window.innerHeight);
+            // スマホ対応: 画面幅が小さい場合は画面左端に固定
+            const calW = Math.min(280, vw - 16);
             let left = rect.left;
-            // 右端チェック：はみ出る場合は右端に合わせる
             if (left + calW > vw - 8) left = vw - calW - 8;
-            // 左端チェック
             if (left < 8) left = 8;
             const spaceBelow = vh - rect.bottom;
-            const top = spaceBelow >= 300 ? rect.bottom + 4 : rect.top - 304;
+            const top = spaceBelow >= 300 ? rect.bottom + 4 : Math.max(8, rect.top - 304);
             setCalPos({ top, left });
           }
           setOpen(o => !o);
@@ -159,7 +158,7 @@ function CustomDatePicker({ value, onChange, style }: { value: string; onChange:
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{displayVal || "年/月/日"}</span>
       </button>
       {open && (
-        <div data-datepicker-popup onPointerDown={(e) => e.stopPropagation()} style={{ position: "fixed", zIndex: 99999, top: calPos.top, left: calPos.left, background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(99,102,241,.28)", border: "1.5px solid #e0e7ff", padding: "10px 12px", minWidth: 260, maxWidth: "calc(100vw - 16px)" }}>
+        <div data-datepicker-popup onPointerDown={(e) => e.stopPropagation()} style={{ position: "fixed", zIndex: 99999, top: calPos.top, left: calPos.left, right: Math.max(8, window.innerWidth - calPos.left - Math.min(280, window.innerWidth - 16)), background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(99,102,241,.28)", border: "1.5px solid #e0e7ff", padding: "10px 12px", minWidth: 0, width: Math.min(280, (Math.min(document.documentElement.clientWidth, window.innerWidth)) - 16) }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <button type="button" onClick={prevMonth} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#6366f1", padding: "0 4px" }}>‹</button>
             <span style={{ fontWeight: 700, fontSize: 13, color: "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif" }}>{viewYear}年 {MONTHS[viewMonth]}</span>
