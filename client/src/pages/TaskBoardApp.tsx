@@ -150,9 +150,9 @@ function CustomDatePicker({ value, onChange, style }: { value: string; onChange:
           setOpen(o => !o);
         }}
         onPointerDown={(e) => e.stopPropagation()}
-        style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: value ? "#1e1b4b" : "#94a3b8", background: "#f8f7ff", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 4 }}>
-        <span>📅</span>
-        <span>{displayVal || "年/月/日"}</span>
+        style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: value ? "#1e1b4b" : "#94a3b8", background: "#f8f7ff", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 4, overflow: "hidden", minWidth: 0 }}>
+        <span style={{ flexShrink: 0 }}>📅</span>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{displayVal || "年/月/日"}</span>
       </button>
       {open && (
         <div data-datepicker-popup onPointerDown={(e) => e.stopPropagation()} style={{ position: "fixed", zIndex: 99999, top: calPos.top, left: calPos.left, background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(99,102,241,.28)", border: "1.5px solid #e0e7ff", padding: "10px 12px", minWidth: 240 }}>
@@ -640,11 +640,11 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
           </div>
         );
       })()}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-        <select value={task.assignee} onChange={(e) => onUpdateField(task.id, "assignee", e.target.value)} style={{ border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff", cursor: "pointer", maxWidth: 120, minWidth: 0, flex: "0 1 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, minWidth: 0, overflow: "hidden" }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+        <select value={task.assignee} onChange={(e) => onUpdateField(task.id, "assignee", e.target.value)} style={{ border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff", cursor: "pointer", maxWidth: 110, minWidth: 0, flex: "0 0 auto" }}>
           {members.map((m: string) => <option key={m}>{m}</option>)}
         </select>
-        <CustomDatePicker value={task.due || ""} onChange={(v) => onUpdateField(task.id, "due", v)} />
+        <CustomDatePicker value={task.due || ""} onChange={(v) => onUpdateField(task.id, "due", v)} style={{ minWidth: 0, flex: "1 1 0", overflow: "hidden" }} />
       </div>
       <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
         <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onComment(task); }} style={{ fontSize: 11, fontWeight: 700, color: "#1877F2", background: "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: 8, padding: "4px 9px", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", flexShrink: 0 }}>💬 コメント</button>
