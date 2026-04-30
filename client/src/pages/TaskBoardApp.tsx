@@ -413,7 +413,7 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
         />
         {/* Fields */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "14px 22px 0" }}>
-          {([["担当者", "assignee", members.map((m: string) => [m, m])], ["優先度", "priority", Object.entries(PRI).map(([k, v]) => [k, v.label])], ["ステータス", "colId", cols.map((c) => [c.id, c.title])], ["期限日", "due", null]] as [string, string, [string, string][] | null][]).map(([label, key, opts]) => (
+          {([["優先度", "priority", Object.entries(PRI).map(([k, v]) => [k, v.label])], ["ステータス", "colId", cols.map((c) => [c.id, c.title])], ["期限日", "due", null]] as [string, string, [string, string][] | null][]).map(([label, key, opts]) => (
             <div key={key}>
               <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 3 }}>{label}</label>
               {opts
@@ -423,6 +423,34 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
                 : <CustomDatePicker value={(task as any)[key] || ""} onChange={(v) => onUpdateField(task.id, key, v)} style={{ flex: "none", width: "100%" }} />}
             </div>
           ))}
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 3 }}>担当者</label>
+            {(() => {
+              const assignees = task.assignee ? task.assignee.split(",").map((a) => a.trim()).filter(Boolean) : [""];
+              const a1 = assignees[0] || "";
+              const a2 = assignees[1] || "";
+              const setAssignees = (v1: string, v2: string) => {
+                const combined = v2 ? `${v1},${v2}` : v1;
+                onUpdateField(task.id, "assignee", combined);
+              };
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <select value={a1} onChange={(e) => setAssignees(e.target.value, a2)} style={{ border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff" }}>
+                    {members.map((m: string) => <option key={m}>{m}</option>)}
+                  </select>
+                  {a2
+                    ? <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <select value={a2} onChange={(e) => setAssignees(a1, e.target.value)} style={{ border: "1.5px solid #c4b5fd", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#6d28d9", background: "#f5f3ff" }}>
+                          {members.map((m: string) => <option key={m}>{m}</option>)}
+                        </select>
+                        <button onClick={() => setAssignees(a1, "")} style={{ background: "none", border: "none", cursor: "pointer", color: "#a78bfa", fontSize: 16, padding: "0 2px", lineHeight: 1 }} title="2人目を削除">×</button>
+                      </div>
+                    : <button onClick={() => setAssignees(a1, members.find((m) => m !== a1) || members[0] || "")} style={{ fontSize: 11, color: "#6366f1", background: "#ede9fe", border: "none", borderRadius: 7, padding: "4px 10px", cursor: "pointer", fontWeight: 700 }}>＋ 担当者追加</button>
+                  }
+                </div>
+              );
+            })()}
+          </div>
         </div>
         <TagEditor tags={task.tags || []} onUpdate={(tags) => onUpdateField(task.id, "tags", tags)} />
         {task.createdBy && (
@@ -641,9 +669,31 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
         );
       })()}
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, minWidth: 0, overflow: "hidden" }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-        <select value={task.assignee} onChange={(e) => onUpdateField(task.id, "assignee", e.target.value)} style={{ border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff", cursor: "pointer", maxWidth: 110, minWidth: 0, flex: "0 0 auto" }}>
-          {members.map((m: string) => <option key={m}>{m}</option>)}
-        </select>
+        {(() => {
+          const assignees = task.assignee ? task.assignee.split(",").map((a) => a.trim()).filter(Boolean) : [""];
+          const a1 = assignees[0] || "";
+          const a2 = assignees[1] || "";
+          const setAssignees = (v1: string, v2: string) => {
+            const combined = v2 ? `${v1},${v2}` : v1;
+            onUpdateField(task.id, "assignee", combined);
+          };
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0, flex: "0 0 auto" }}>
+              <select value={a1} onChange={(e) => setAssignees(e.target.value, a2)} style={{ border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff", cursor: "pointer", maxWidth: 110, minWidth: 0 }}>
+                {members.map((m: string) => <option key={m}>{m}</option>)}
+              </select>
+              {a2
+                ? <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    <select value={a2} onChange={(e) => setAssignees(a1, e.target.value)} style={{ border: "1.5px solid #c4b5fd", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#6d28d9", background: "#f5f3ff", cursor: "pointer", maxWidth: 95, minWidth: 0 }}>
+                      {members.map((m: string) => <option key={m}>{m}</option>)}
+                    </select>
+                    <button onClick={() => setAssignees(a1, "")} style={{ background: "none", border: "none", cursor: "pointer", color: "#a78bfa", fontSize: 13, padding: "0 2px", lineHeight: 1 }} title="2人目を削除">×</button>
+                  </div>
+                : <button onClick={() => setAssignees(a1, members.find((m) => m !== a1) || members[0] || "")} style={{ fontSize: 10, color: "#6366f1", background: "#ede9fe", border: "none", borderRadius: 6, padding: "2px 6px", cursor: "pointer", fontWeight: 700, textAlign: "left" }}>＋ 担当者追加</button>
+              }
+            </div>
+          );
+        })()}
         <CustomDatePicker value={task.due || ""} onChange={(v) => onUpdateField(task.id, "due", v)} style={{ minWidth: 0, flex: "1 1 0", overflow: "hidden" }} />
       </div>
       <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
@@ -750,9 +800,11 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
 // ─── AddTaskModal ─────────────────────────────────────────────────────────────
 function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave }: { defaultCol: string; cols: Col[]; members: string[]; currentUser?: string; onClose: () => void; onSave: (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[]; createdBy?: string }) => void }) {
   const [form, setForm] = useState({ title: "", colId: defaultCol || cols[0]?.id || "", assignee: members[0] || "", priority: "medium", due: "", tags: [] as string[] });
+  const [assignee2, setAssignee2] = useState("");
   const [tagInput, setTagInput] = useState("");
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const addTag = () => { if (tagInput.trim() && !form.tags.includes(tagInput.trim())) { set("tags", [...form.tags, tagInput.trim()]); setTagInput(""); } };
+  const combinedAssignee = assignee2 ? `${form.assignee},${assignee2}` : form.assignee;
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,10,40,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(3px)", padding: 16 }}
       onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -763,7 +815,7 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
           style={{ width: "100%", border: "2px solid #e0e7ff", borderRadius: 10, padding: "9px 11px", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 14, fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }}
           onFocus={(e) => (e.target.style.borderColor = "#6366f1")} onBlur={(e) => (e.target.style.borderColor = "#e0e7ff")} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-          {([["担当者", "assignee", members.map((m: string) => [m, m])], ["優先度", "priority", Object.entries(PRI).map(([k, v]) => [k, v.label])], ["ステータス", "colId", cols.map((c) => [c.id, c.title])], ["期限日", "due", null]] as [string, string, [string, string][] | null][]).map(([label, key, opts]) => (
+          {([["優先度", "priority", Object.entries(PRI).map(([k, v]) => [k, v.label])], ["ステータス", "colId", cols.map((c) => [c.id, c.title])], ["期限日", "due", null]] as [string, string, [string, string][] | null][]).map(([label, key, opts]) => (
             <div key={key}>
               <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>{label}</label>
               {opts
@@ -773,6 +825,23 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
                 : <CustomDatePicker value={(form as any)[key] || ""} onChange={(v) => set(key, v)} style={{ flex: "none", width: "100%" }} />}
             </div>
           ))}
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>担当者</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <select value={form.assignee} onChange={(e) => set("assignee", e.target.value)} style={{ border: "2px solid #e0e7ff", borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#fff" }}>
+                {members.map((m: string) => <option key={m}>{m}</option>)}
+              </select>
+              {assignee2
+                ? <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <select value={assignee2} onChange={(e) => setAssignee2(e.target.value)} style={{ border: "2px solid #c4b5fd", borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#6d28d9", background: "#f5f3ff" }}>
+                      {members.map((m: string) => <option key={m}>{m}</option>)}
+                    </select>
+                    <button onClick={() => setAssignee2("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#a78bfa", fontSize: 18, padding: "0 2px", lineHeight: 1 }} title="2人目を削除">×</button>
+                  </div>
+                : <button onClick={() => setAssignee2(members.find((m) => m !== form.assignee) || members[0] || "")} style={{ fontSize: 12, color: "#6366f1", background: "#ede9fe", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 700 }}>＋ 担当者追加</button>
+              }
+            </div>
+          </div>
         </div>
         <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>タグ</label>
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
@@ -789,7 +858,7 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
-          <button onClick={() => form.title.trim() && onSave({ ...form, createdBy: currentUser || undefined })} style={{ background: form.title.trim() ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: form.title.trim() ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: form.title.trim() ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
+          <button onClick={() => form.title.trim() && onSave({ ...form, assignee: combinedAssignee, createdBy: currentUser || undefined })} style={{ background: form.title.trim() ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: form.title.trim() ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: form.title.trim() ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
         </div>
       </div>
     </div>

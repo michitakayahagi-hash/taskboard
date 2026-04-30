@@ -320,7 +320,8 @@ async function sendOverdueNotifications() {
         lines.push(`⚠️ *期限超過: ${ptasksOverdue.length}件*`);
         for (const t of ptasksOverdue) {
           lines.push(`📋 ${t.title}`);
-          lines.push(`  🗂 ${t.colTitle || "不明"} ｜ 👤 ${t.assignee || "担当未設定"} ｜ 📅 ${t.due}`);
+          const assigneeDisplay = t.assignee ? t.assignee.split(",").map((a: string) => a.trim()).filter(Boolean).join(" & ") : "担当未設定";
+          lines.push(`  🗂 ${t.colTitle || "不明"} ｜ 👤 ${assigneeDisplay} ｜ 📅 ${t.due}`);
         }
         lines.push("");
       }
@@ -329,7 +330,8 @@ async function sendOverdueNotifications() {
         lines.push(`🗓 *期限未設定: ${ptasksNoDue.length}件*`);
         for (const t of ptasksNoDue) {
           lines.push(`📋 ${t.title}`);
-          lines.push(`  🗂 ${t.colTitle || "不明"} ｜ 👤 ${t.assignee || "担当未設定"}`);
+          const assigneeDisplay2 = t.assignee ? t.assignee.split(",").map((a: string) => a.trim()).filter(Boolean).join(" & ") : "担当未設定";
+          lines.push(`  🗂 ${t.colTitle || "不明"} ｜ 👤 ${assigneeDisplay2}`);
         }
         lines.push("");
       }
