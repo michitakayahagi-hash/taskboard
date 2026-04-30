@@ -727,7 +727,7 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(col.title);
-  const [sortByDue, setSortByDue] = useState(false);
+  const [sortByDue, setSortByDue] = useState(true);
   const isOver = dropTarget?.col === col.id;
   const insertIdx = isOver ? dropTarget!.index : -1;
   const isColDragging = colDraggingId === col.id;
@@ -763,7 +763,7 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
         {!isDoneCol && (
           <button
             onClick={() => setSortByDue((v) => !v)}
-            title={sortByDue ? "期限順（クリックで解除）" : "期限日付順に並び替え"}
+            title={sortByDue ? "期限順（クリックで手動順に切り替え）" : "手動順（クリックで期限順に戻す）"}
             style={{ background: sortByDue ? "#6366f1" : "none", border: sortByDue ? "none" : "none", cursor: "pointer", color: sortByDue ? "#fff" : "#c7d2fe", fontSize: 13, padding: sortByDue ? "2px 5px" : "0 2px", lineHeight: "1", borderRadius: 6, flexShrink: 0, fontWeight: 700, transition: "background .15s,color .15s" }}
             onMouseEnter={(e) => { if (!sortByDue) e.currentTarget.style.color = "#6366f1"; }}
             onMouseLeave={(e) => { if (!sortByDue) e.currentTarget.style.color = "#c7d2fe"; }}>
