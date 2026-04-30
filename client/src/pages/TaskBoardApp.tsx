@@ -281,7 +281,7 @@ function DescriptionField({ task, onUpdateDescription }: { task: TaskType; onUpd
       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "#f8f7ff"; (e.currentTarget as HTMLDivElement).style.borderColor = "#e0e7ff"; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; (e.currentTarget as HTMLDivElement).style.borderColor = "transparent"; }}>
       {text
-        ? <p style={{ margin: 0, fontSize: 13, color: "#1e1b4b", lineHeight: 1.6, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "pre-wrap" }}>{text}</p>
+        ? <p style={{ margin: 0, fontSize: 13, color: "#1e1b4b", lineHeight: 1.6, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere" }}>{text}</p>
         : <p style={{ margin: 0, fontSize: 13, color: "#c7d2fe", fontFamily: "'Noto Sans JP',sans-serif" }}>+ 概要を追加...</p>}
     </div>
   );
@@ -593,7 +593,7 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
                       )}
                     </div>
                   </div>
-                  <p style={{ margin: 0, fontSize: 13, color: "#1e1b4b", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{renderCommentText(c.text)}</p>
+                  <p style={{ margin: 0, fontSize: 13, color: "#1e1b4b", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere" }}>{renderCommentText(c.text)}</p>
                 </div>
               ))}
               {dbComments.length === 0 && <p style={{ fontSize: 13, color: "#c7d2fe", textAlign: "center", marginTop: 16 }}>コメントはまだありません</p>}
