@@ -242,9 +242,11 @@ function TagEditor({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string
       <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 6 }}>タグ</label>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
         {tags.map((t) => (
-          <span key={t} style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 20, display: "flex", alignItems: "center", gap: 4 }}>
-            {t}
-            <span onClick={() => onUpdate(tags.filter((x) => x !== t))} style={{ cursor: "pointer", fontSize: 13, lineHeight: "1", color: "#a78bfa" }}>×</span>
+          <span key={t} style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 20, display: "flex", alignItems: "center", gap: 4, maxWidth: "100%", overflow: "hidden" }}>
+            {/^https?:\/\//.test(t)
+              ? <a href={t} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#6366f1", textDecoration: "underline", wordBreak: "break-all", fontSize: 11 }}>{t}</a>
+              : <span style={{ wordBreak: "break-all" }}>{t}</span>}
+            <span onClick={() => onUpdate(tags.filter((x) => x !== t))} style={{ cursor: "pointer", fontSize: 13, lineHeight: "1", color: "#a78bfa", flexShrink: 0 }}>×</span>
           </span>
         ))}
         {tags.length === 0 && <span style={{ fontSize: 12, color: "#c7d2fe" }}>タグなし</span>}
@@ -638,7 +640,13 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
       <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: isDone ? "#9ca3af" : overdue ? "#b91c1c" : "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif", lineHeight: 1.4, textDecoration: isDone ? "line-through" : "none" }}>{overdue && <span style={{ marginRight: 4 }}>🚨</span>}{task.title}</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: task.due ? 4 : 8 }}>
         <span style={{ background: p.color + "18", color: p.color, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20 }}>{p.label}</span>
-        {(task.tags || []).map((t) => <span key={t} style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20 }}>{t}</span>)}
+        {(task.tags || []).map((t) => (
+          <span key={t} style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20, maxWidth: "100%", overflow: "hidden", display: "inline-flex", alignItems: "center" }}>
+            {/^https?:\/\//.test(t)
+              ? <a href={t} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#6366f1", textDecoration: "underline", wordBreak: "break-all", fontSize: 10 }}>{t}</a>
+              : t}
+          </span>
+        ))}
         <InlineTagInput onAdd={(tag) => { if (tag && !(task.tags || []).includes(tag)) onUpdateField(task.id, "tags", [...(task.tags || []), tag]); }} />
       </div>
       {task.due && (() => {
@@ -855,8 +863,11 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 16 }}>
           {form.tags.map((t) => (
-            <span key={t} style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 20, display: "flex", alignItems: "center", gap: 4 }}>
-              {t}<span onClick={() => set("tags", form.tags.filter((x) => x !== t))} style={{ cursor: "pointer", fontSize: 13, lineHeight: "1", color: "#a78bfa" }}>×</span>
+            <span key={t} style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 20, display: "flex", alignItems: "center", gap: 4, maxWidth: "100%", overflow: "hidden" }}>
+              {/^https?:\/\//.test(t)
+                ? <a href={t} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#6366f1", textDecoration: "underline", wordBreak: "break-all", fontSize: 11 }}>{t}</a>
+                : <span style={{ wordBreak: "break-all" }}>{t}</span>}
+              <span onClick={() => set("tags", form.tags.filter((x) => x !== t))} style={{ cursor: "pointer", fontSize: 13, lineHeight: "1", color: "#a78bfa", flexShrink: 0 }}>×</span>
             </span>
           ))}
         </div>
