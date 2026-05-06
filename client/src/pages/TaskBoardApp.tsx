@@ -280,7 +280,7 @@ function DescriptionField({ task, onUpdateDescription }: { task: TaskType; onUpd
       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "#f8f7ff"; (e.currentTarget as HTMLDivElement).style.borderColor = "#e0e7ff"; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; (e.currentTarget as HTMLDivElement).style.borderColor = "transparent"; }}>
       {text
-        ? <p style={{ margin: 0, fontSize: 13, color: "#1e1b4b", lineHeight: 1.6, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere" }}>{text}</p>
+        ? <p style={{ margin: 0, fontSize: 13, color: "#1e1b4b", lineHeight: 1.6, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere" }}>{renderCommentText(text)}</p>
         : <p style={{ margin: 0, fontSize: 13, color: "#c7d2fe", fontFamily: "'Noto Sans JP',sans-serif" }}>+ 概要を追加...</p>}
     </div>
   );
@@ -514,9 +514,10 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: 32 }}>
                     <span style={{ fontSize: 11, color: "#94a3b8" }}>🔗</span>
                     <input
-                      type="url"
-                      value={s.url || ""}
-                      onChange={(e) => { const ns = [...task.subtasks]; ns[i] = { ...s, url: e.target.value }; onUpdateSubtasks(task.id, ns); }}
+                      type="text"
+                      defaultValue={s.url || ""}
+                      key={s.id + "-url"}
+                      onBlur={(e) => { const v = e.target.value.trim(); if (v !== (s.url || "")) { const ns = [...task.subtasks]; ns[i] = { ...s, url: v || undefined }; onUpdateSubtasks(task.id, ns); } }}
                       placeholder="URLを入力（任意）"
                       style={{ flex: 1, fontSize: 11, border: "1px solid #e0e7ff", borderRadius: 6, padding: "2px 6px", color: "#1e1b4b", background: "#fff", fontFamily: "'Noto Sans JP',sans-serif", outline: "none" }}
                     />
