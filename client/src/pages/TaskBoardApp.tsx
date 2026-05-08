@@ -811,7 +811,7 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
 
 // ─── AddTaskModal ─────────────────────────────────────────────────────────────
 function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave }: { defaultCol: string; cols: Col[]; members: string[]; currentUser?: string; onClose: () => void; onSave: (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[]; createdBy?: string }) => void }) {
-  const [form, setForm] = useState({ title: "", colId: defaultCol || cols[0]?.id || "", assignee: members[0] || "", priority: "medium", due: "", tags: [] as string[] });
+  const [form, setForm] = useState({ title: "", colId: defaultCol || cols[0]?.id || "", assignee: "", priority: "medium", due: "", tags: [] as string[] });
   const [assignee2, setAssignee2] = useState("");
   const [tagInput, setTagInput] = useState("");
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
@@ -841,6 +841,7 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
             <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>担当者</label>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <select value={form.assignee} onChange={(e) => set("assignee", e.target.value)} style={{ border: "2px solid #e0e7ff", borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#fff" }}>
+                <option value="">担当なし</option>
                 {members.map((m: string) => <option key={m}>{m}</option>)}
               </select>
               {assignee2
