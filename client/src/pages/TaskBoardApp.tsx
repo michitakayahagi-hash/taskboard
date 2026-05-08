@@ -9,6 +9,7 @@ import ImportModal from "./ImportModal";
 import { ProjectLoginModal, ProjectMemberSettings } from "./ProjectAccessModal";
 import { SubtaskTemplatePanel } from "@/features/SubtaskTemplatePanel";
 import HelpModal from "./HelpModal";
+import AssigneeView from "@/features/AssigneeView";
 
 // ─── 定数 ────────────────────────────────────────────────────────────────────
 const PRI: Record<string, { label: string; color: string }> = {
@@ -1020,9 +1021,9 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isP
 }
 
 /// ─── ProjectList ────────────────────────────────────────────────────────────
-function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete, onRename, onRefresh, onDuplicate }: {
+function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete, onRename, onRefresh, onDuplicate, onShowAssigneeView }: {
   projects: ProjectType[]; taskCounts: Record<string, { total: number; done: number; dueToday: number }>;
-  onSelect: (id: string) => void; onAdd: () => void; onImport: () => void; onDelete: (id: string) => void; onRename: (id: string, name: string) => void; onRefresh: () => void; onDuplicate: (id: string) => void;
+  onSelect: (id: string) => void; onAdd: () => void; onImport: () => void; onDelete: (id: string) => void; onRename: (id: string, name: string) => void; onRefresh: () => void; onDuplicate: (id: string) => void; onShowAssigneeView: () => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameVal, setNameVal] = useState("");
@@ -1037,6 +1038,8 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
         </div>
         <span style={{ fontSize: 13, color: "#94a3b8" }}>プロジェクト一覧</span>
         <div style={{ flex: 1 }} />
+        <button onClick={onShowAssigneeView} title="担当者ダッシュボード" style={{ background: "#f8f7ff", color: "#6366f1", border: "1.5px solid #e0e7ff", borderRadius: 10, padding: "7px 12px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontWeight: 700, fontFamily: "'Noto Sans JP',sans-serif", transition: "background .15s", whiteSpace: "nowrap" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#f8f7ff")}>👥 担当者</button>
         <button onClick={async (e) => {
             const btn = e.currentTarget;
             btn.style.transform = "rotate(360deg)";
@@ -1596,6 +1599,7 @@ export default function TaskBoardApp() {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [showAddProject, setShowAddProject] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showAssigneeView, setShowAssigneeView] = useState(false);
 
   const currentProject = projects.find((p) => p.id === currentProjectId);
 
@@ -1659,9 +1663,13 @@ export default function TaskBoardApp() {
     return <BoardView project={currentProject} onBack={() => setCurrentProjectId(null)} />;
   }
 
+  if (showAssigneeView) {
+    return <AssigneeView onBack={() => setShowAssigneeView(false)} />;
+  }
+
   return (
     <>
-      <ProjectList projects={projects} taskCounts={taskCounts} onSelect={setCurrentProjectId} onAdd={() => setShowAddProject(true)} onImport={() => setShowImport(true)} onDelete={handleDelete} onRename={handleRename} onRefresh={async () => { await utils.project.list.invalidate(); await utils.task.list.invalidate(); await utils.column.list.invalidate(); }} onDuplicate={handleDuplicate} />
+      <ProjectList projects={projects} taskCounts={taskCounts} onSelect={setCurrentProjectId} onAdd={() => setShowAddProject(true)} onImport={() => setShowImport(true)} onDelete={handleDelete} onRename={handleRename} onRefresh={async () => { await utils.project.list.invalidate(); await utils.task.list.invalidate(); await utils.column.list.invalidate(); }} onDuplicate={handleDuplicate} onShowAssigneeView={() => setShowAssigneeView(true)} />
       {showAddProject && <AddProjectModal onClose={() => setShowAddProject(false)} onSave={addProject} existingCount={projects.length} />}
       {showImport && <ImportModal onClose={() => { setShowImport(false); utils.project.list.invalidate(); }} onImported={(pid: string) => { setShowImport(false); utils.project.list.invalidate(); setCurrentProjectId(pid); }} />}
     </>

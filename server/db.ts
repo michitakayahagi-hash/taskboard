@@ -162,6 +162,24 @@ export async function getTasksByProject(projectId: string) {
   return db.select().from(tasks).where(eq(tasks.projectId, projectId)).orderBy(asc(tasks.sortOrder));
 }
 
+export async function getAllTasksWithMeta() {
+  const db = await getDb();
+  if (!db) return [];
+  const allTasks = await db.select().from(tasks).orderBy(asc(tasks.sortOrder));
+  const allProjects = await db.select().from(projects);
+  const allColumns = await db.select().from(columns);
+  const projectMap: Record<string, string> = {};
+  allProjects.forEach((p: any) => { projectMap[p.id] = p.name; });
+  const columnMap: Record<string, { title: string; color: string }> = {};
+  allColumns.forEach((c: any) => { columnMap[c.id] = { title: c.title, color: c.color }; });
+  return allTasks.map((t: any) => ({
+    ...t,
+    projectName: projectMap[t.projectId] || t.projectId,
+    colTitle: columnMap[t.colId]?.title || t.colId,
+    colColor: columnMap[t.colId]?.color || "#6366f1",
+  }));
+}
+
 export async function createTask(data: InsertTask) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");

@@ -206,6 +206,10 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return db.getTasksByProject(input.projectId);
       }),
+    listAll: publicProcedure
+      .query(async () => {
+        return db.getAllTasksWithMeta();
+      }),
     get: publicProcedure
       .input(z.object({ id: z.string() }))
       .query(async ({ input }) => {
