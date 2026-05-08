@@ -112,6 +112,63 @@ export const appRouter = router({
         await db.deleteProject(input.id);
         return { success: true };
       }),
+    duplicate: publicProcedure
+      .input(z.object({ id: z.string() }))
+      .mutation(async ({ input }) => {
+        // 元プロジェクトを取得
+        const allProjects = await db.getAllProjects();
+        const src = allProjects.find((p: any) => p.id === input.id);
+        if (!src) throw new TRPCError({ code: "NOT_FOUND", message: "プロジェクトが見つかりません" });
+
+        const now = Date.now();
+        const newProjectId = "p" + now;
+
+        // プロジェクト複製
+        await db.createProject({
+          id: newProjectId,
+          name: src.name + "のコピー",
+          color: src.color,
+          webhookUrl: src.webhookUrl ?? null,
+        });
+
+        // カラム複製
+        const srcCols = await db.getColumnsByProject(input.id);
+        const colIdMap: Record<string, string> = {};
+        for (const col of srcCols) {
+          const newColId = "col_" + newProjectId + "_" + now + "_" + col.id;
+          colIdMap[col.id] = newColId;
+          await db.createColumn({
+            id: newColId,
+            projectId: newProjectId,
+            title: col.title,
+            color: col.color,
+            sortOrder: col.sortOrder,
+          });
+        }
+
+        // タスク複製
+        const srcTasks = await db.getTasksByProject(input.id);
+        if (srcTasks.length > 0) {
+          const newTasks = srcTasks.map((t: any, i: number) => ({
+            id: "t" + now + "_" + i,
+            projectId: newProjectId,
+            colId: colIdMap[t.colId] ?? t.colId,
+            title: t.title,
+            assignee: t.assignee ?? "",
+            priority: t.priority ?? "medium",
+            due: t.due ?? null,
+            tags: t.tags ?? [],
+            subtasks: t.subtasks ?? [],
+            description: t.description ?? null,
+            sortOrder: t.sortOrder ?? 0,
+            prevCol: t.prevCol ? (colIdMap[t.prevCol] ?? t.prevCol) : null,
+            createdBy: t.createdBy ?? null,
+          }));
+          await db.createTasksBatch(newTasks);
+        }
+
+        return { success: true, newProjectId, name: src.name + "のコピー" };
+      }),
   }),
 
   // ─── Columns ────────────────────────────────────────────────────────────

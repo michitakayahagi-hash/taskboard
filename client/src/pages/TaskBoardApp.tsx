@@ -1019,9 +1019,9 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isP
 }
 
 /// ─── ProjectList ────────────────────────────────────────────────────────────
-function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete, onRename, onRefresh }: {
+function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete, onRename, onRefresh, onDuplicate }: {
   projects: ProjectType[]; taskCounts: Record<string, { total: number; done: number; dueToday: number }>;
-  onSelect: (id: string) => void; onAdd: () => void; onImport: () => void; onDelete: (id: string) => void; onRename: (id: string, name: string) => void; onRefresh: () => void;
+  onSelect: (id: string) => void; onAdd: () => void; onImport: () => void; onDelete: (id: string) => void; onRename: (id: string, name: string) => void; onRefresh: () => void; onDuplicate: (id: string) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameVal, setNameVal] = useState("");
@@ -1088,9 +1088,11 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
                 )}
                 <div style={{ fontSize: 12, color: "#94a3b8" }}>今日が期限のタスク {counts.dueToday}件</div>
                 <div style={{ position: "absolute", top: 14, right: 14, display: "flex", gap: 4 }}>
-                  <button onClick={(e) => { e.stopPropagation(); setEditingId(p.id); setNameVal(p.name); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "2px 4px", borderRadius: 6 }}
+                  <button onClick={(e) => { e.stopPropagation(); setEditingId(p.id); setNameVal(p.name); }} title="名前を変更" style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "2px 4px", borderRadius: 6 }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")} onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>✏️</button>
-                  {<button onClick={(e) => { e.stopPropagation(); if (window.confirm(`「${p.name}」を削除しますか？\n\nタスク・カラム・メンバー情報もすべて削除されます。\nこの操作は元に戻せません。`)) onDelete(p.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "2px 4px", borderRadius: 6 }}
+                  <button onClick={(e) => { e.stopPropagation(); if (window.confirm(`「${p.name}」をまるごと複製しますか？\n\nカラム・タスクがすべてコピーされます。`)) onDuplicate(p.id); }} title="複製" style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "2px 4px", borderRadius: 6 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "#8b5cf6")} onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>📋</button>
+                  {<button onClick={(e) => { e.stopPropagation(); if (window.confirm(`「${p.name}」を削除しますか？\n\nタスク・カラム・メンバー情報もすべて削除されます。\nこの操作は元に戻せません。`)) onDelete(p.id); }} title="削除" style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "2px 4px", borderRadius: 6 }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>🗑</button>}
                 </div>
               </div>
@@ -1588,6 +1590,7 @@ export default function TaskBoardApp() {
   const createProject = trpc.project.create.useMutation({ onSuccess: () => utils.project.list.invalidate() });
   const updateProject = trpc.project.update.useMutation({ onSuccess: () => utils.project.list.invalidate() });
   const deleteProject = trpc.project.delete.useMutation({ onSuccess: () => utils.project.list.invalidate() });
+  const duplicateProject = trpc.project.duplicate.useMutation({ onSuccess: () => utils.project.list.invalidate() });
 
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [showAddProject, setShowAddProject] = useState(false);
@@ -1617,6 +1620,7 @@ export default function TaskBoardApp() {
 
   const handleDelete = (id: string) => { deleteProject.mutate({ id }); };
   const handleRename = (id: string, name: string) => { updateProject.mutate({ id, name }); };
+  const handleDuplicate = (id: string) => { duplicateProject.mutate({ id }); };
 
   // Task counts for project list
   const [taskCounts, setTaskCounts] = useState<Record<string, { total: number; done: number; dueToday: number }>>({});
@@ -1656,7 +1660,7 @@ export default function TaskBoardApp() {
 
   return (
     <>
-      <ProjectList projects={projects} taskCounts={taskCounts} onSelect={setCurrentProjectId} onAdd={() => setShowAddProject(true)} onImport={() => setShowImport(true)} onDelete={handleDelete} onRename={handleRename} onRefresh={async () => { await utils.project.list.invalidate(); await utils.task.list.invalidate(); await utils.column.list.invalidate(); }} />
+      <ProjectList projects={projects} taskCounts={taskCounts} onSelect={setCurrentProjectId} onAdd={() => setShowAddProject(true)} onImport={() => setShowImport(true)} onDelete={handleDelete} onRename={handleRename} onRefresh={async () => { await utils.project.list.invalidate(); await utils.task.list.invalidate(); await utils.column.list.invalidate(); }} onDuplicate={handleDuplicate} />
       {showAddProject && <AddProjectModal onClose={() => setShowAddProject(false)} onSave={addProject} existingCount={projects.length} />}
       {showImport && <ImportModal onClose={() => { setShowImport(false); utils.project.list.invalidate(); }} onImported={(pid: string) => { setShowImport(false); utils.project.list.invalidate(); setCurrentProjectId(pid); }} />}
     </>
