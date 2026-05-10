@@ -815,6 +815,7 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
   const [form, setForm] = useState({ title: "", colId: defaultCol || cols[0]?.id || "", assignee: "", priority: "medium", due: "", tags: [] as string[] });
   const [assignee2, setAssignee2] = useState("");
   const [tagInput, setTagInput] = useState("");
+  const [createdBySelected, setCreatedBySelected] = useState(currentUser || "");
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const addTag = () => { if (tagInput.trim() && !form.tags.includes(tagInput.trim())) { set("tags", [...form.tags, tagInput.trim()]); setTagInput(""); } };
   const combinedAssignee = assignee2 ? `${form.assignee},${assignee2}` : form.assignee;
@@ -873,9 +874,16 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
             </span>
           ))}
         </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>👤 作成者</label>
+          <select value={createdBySelected} onChange={(e) => setCreatedBySelected(e.target.value)} style={{ width: "100%", border: "2px solid #e0e7ff", borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#fff" }}>
+            <option value="">作成者なし</option>
+            {members.map((m: string) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
-          <button onClick={() => form.title.trim() && onSave({ ...form, assignee: combinedAssignee, createdBy: currentUser || undefined })} style={{ background: form.title.trim() ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: form.title.trim() ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: form.title.trim() ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
+          <button onClick={() => form.title.trim() && onSave({ ...form, assignee: combinedAssignee, createdBy: createdBySelected || undefined })} style={{ background: form.title.trim() ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: form.title.trim() ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: form.title.trim() ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
         </div>
       </div>
     </div>
