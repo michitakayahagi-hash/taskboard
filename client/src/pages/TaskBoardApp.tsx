@@ -459,12 +459,17 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
           </div>
         </div>
         <TagEditor tags={task.tags || []} onUpdate={(tags) => onUpdateField(task.id, "tags", tags)} />
-        {task.createdBy && (
-          <div style={{ padding: "4px 22px 0", display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600 }}>👤 作成者:</span>
-            <span style={{ fontSize: 11, color: "#6366f1", fontWeight: 700 }}>{task.createdBy}</span>
-          </div>
-        )}
+        <div style={{ padding: "4px 22px 0", display: "flex", alignItems: "center", gap: 6 }}>
+          <label style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, flexShrink: 0 }}>👤 作成者:</label>
+          <select
+            value={task.createdBy || ""}
+            onChange={(e) => onUpdateField(task.id, "createdBy", e.target.value)}
+            style={{ border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "4px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: task.createdBy ? "#6366f1" : "#94a3b8", background: "#f8f7ff", fontWeight: 700 }}
+          >
+            <option value="">作成者なし</option>
+            {members.map((m: string) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
         <DescriptionField task={task} onUpdateDescription={onUpdateDescription} />
         {/* Tabs */}
         <div style={{ display: "flex", borderBottom: "1.5px solid #f0f0ff", flexShrink: 0 }}>

@@ -247,6 +247,7 @@ export const appRouter = router({
         description: z.string().nullable().optional(),
         sortOrder: z.number().optional(),
         prevCol: z.string().nullable().optional(),
+        createdBy: z.string().nullable().optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
