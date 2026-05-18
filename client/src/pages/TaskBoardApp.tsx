@@ -816,8 +816,8 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
 }
 
 // ─── AddTaskModal ─────────────────────────────────────────────────────────────
-function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave }: { defaultCol: string; cols: Col[]; members: string[]; currentUser?: string; onClose: () => void; onSave: (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[]; createdBy?: string }) => void }) {
-  const [form, setForm] = useState({ title: "", colId: defaultCol || cols[0]?.id || "", assignee: "", priority: "medium", due: "", tags: [] as string[] });
+function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave }: { defaultCol: string; cols: Col[]; members: string[]; currentUser?: string; onClose: () => void; onSave: (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[]; createdBy?: string; description?: string }) => void }) {
+  const [form, setForm] = useState({ title: "", colId: defaultCol || cols[0]?.id || "", assignee: "", priority: "medium", due: "", tags: [] as string[], description: "" });
   const [assignee2, setAssignee2] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [createdBySelected, setCreatedBySelected] = useState(currentUser || "");
@@ -863,6 +863,13 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
             </div>
           </div>
         </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>概要</label>
+          <textarea value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="概要を入力..."
+            rows={3}
+            style={{ width: "100%", border: "2px solid #e0e7ff", borderRadius: 10, padding: "9px 11px", fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", resize: "vertical" }}
+            onFocus={(e) => (e.target.style.borderColor = "#6366f1")} onBlur={(e) => (e.target.style.borderColor = "#e0e7ff")} />
+        </div>
         <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>タグ</label>
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           <input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTag()} placeholder="Enter で追加"
@@ -888,7 +895,7 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
-          <button onClick={() => form.title.trim() && onSave({ ...form, assignee: combinedAssignee, createdBy: createdBySelected || undefined })} style={{ background: form.title.trim() ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: form.title.trim() ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: form.title.trim() ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
+          <button onClick={() => form.title.trim() && onSave({ ...form, assignee: combinedAssignee, createdBy: createdBySelected || undefined, description: form.description || undefined })} style={{ background: form.title.trim() ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: form.title.trim() ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: form.title.trim() ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
         </div>
       </div>
     </div>
@@ -1412,11 +1419,11 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
 
   const onCardClick = useCallback((task: TaskType) => { if (!dragRef.current.moved) setDetailTask(task); dragRef.current.moved = false; }, []);
 
-  const saveTask = (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[]; createdBy?: string }) => {
+  const saveTask = (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[]; createdBy?: string; description?: string }) => {
     // 新規タスクをsortOrder=0で作成し、既存タスクを全て+1ずらして先頭に表示
     const colList = tasks.filter((t) => t.colId === form.colId);
     colList.forEach((t) => { updateTask.mutate({ id: t.id, sortOrder: t.sortOrder + 1 }); });
-    createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, tags: form.tags, sortOrder: 0, createdBy: form.createdBy || undefined });
+    createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, tags: form.tags, sortOrder: 0, createdBy: form.createdBy || undefined, description: form.description || undefined });
     // Google Chat通知
     if (webhookUrl && form.assignee) {
       const colName = cols.find((c) => c.id === form.colId)?.title || "";
