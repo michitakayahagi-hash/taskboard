@@ -107,6 +107,24 @@ async function runMigrations() {
   } catch (err) {
     console.error("[DB] subtask_templates table error:", err);
   }
+  // Ensure due_history table exists
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    await conn.execute(`CREATE TABLE IF NOT EXISTS due_history (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      taskId VARCHAR(64) NOT NULL,
+      prevDue VARCHAR(20),
+      newDue VARCHAR(20),
+      changedBy VARCHAR(100),
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_task_id (taskId)
+    )`);
+    console.log("[DB] due_history table ensured");
+    await conn.end();
+  } catch (err) {
+    console.error("[DB] due_history table error:", err);
+  }
 }
 
 async function trimDoneTasksOnStartup() {
