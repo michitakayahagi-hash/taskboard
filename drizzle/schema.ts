@@ -189,3 +189,18 @@ export const subtaskTemplates = mysqlTable("subtask_templates", {
 });
 export type SubtaskTemplate = typeof subtaskTemplates.$inferSelect;
 export type InsertSubtaskTemplate = typeof subtaskTemplates.$inferInsert;
+
+/**
+ * Due date history table
+ * - タスクの期限日変更履歴を記録する
+ */
+export const dueHistory = mysqlTable("due_history", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: varchar("taskId", { length: 64 }).notNull(),
+  prevDue: varchar("prevDue", { length: 20 }),
+  newDue: varchar("newDue", { length: 20 }),
+  changedBy: varchar("changedBy", { length: 100 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DueHistory = typeof dueHistory.$inferSelect;
+export type InsertDueHistory = typeof dueHistory.$inferInsert;

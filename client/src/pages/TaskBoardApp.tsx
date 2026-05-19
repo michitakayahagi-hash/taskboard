@@ -299,7 +299,8 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
   onUpdateField: (id: string, field: string, value: unknown) => void;
   onDeleteTask?: (taskId: string) => void;
 }) {
-  const [tab, setTab] = useState<"subtasks" | "comments" | "attachments">("subtasks");
+  const [tab, setTab] = useState<"subtasks" | "comments" | "attachments" | "dueHistory">("subtasks");
+  const dueHistoryQuery = trpc.dueHistory.list.useQuery({ taskId: task.id }, { enabled: tab === "dueHistory" });
   const [newSub, setNewSub] = useState("");
   const [editingSubId, setEditingSubId] = useState<number | null>(null);
   const [editingSubText, setEditingSubText] = useState("");
@@ -473,9 +474,9 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
         <DescriptionField task={task} onUpdateDescription={onUpdateDescription} />
         {/* Tabs */}
         <div style={{ display: "flex", borderBottom: "1.5px solid #f0f0ff", flexShrink: 0 }}>
-          {(["subtasks", "comments", "attachments"] as const).map((t) => (
-            <button key={t} onClick={(e) => { e.stopPropagation(); setTab(t); }} style={{ flex: 1, padding: "10px", fontSize: 12, fontWeight: 700, color: tab === t ? "#6366f1" : "#94a3b8", background: "none", border: "none", borderBottom: tab === t ? "2.5px solid #6366f1" : "2.5px solid transparent", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>
-              {t === "subtasks" ? "✅ 小タスク" : t === "comments" ? "💬 コメント" : "📎 添付"}
+          {(["subtasks", "comments", "attachments", "dueHistory"] as const).map((t) => (
+            <button key={t} onClick={(e) => { e.stopPropagation(); setTab(t); }} style={{ flex: 1, padding: "10px", fontSize: 11, fontWeight: 700, color: tab === t ? "#6366f1" : "#94a3b8", background: "none", border: "none", borderBottom: tab === t ? "2.5px solid #6366f1" : "2.5px solid transparent", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>
+              {t === "subtasks" ? "✅ 小タスク" : t === "comments" ? "💬 コメント" : t === "attachments" ? "📎 添付" : "📅 日付履歴"}
             </button>
           ))}
         </div>
@@ -577,6 +578,26 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
                   </div>
                 );
               })}
+            </>
+          ) : tab === "dueHistory" ? (
+            <>
+              {dueHistoryQuery.isLoading && <p style={{ fontSize: 13, color: "#94a3b8", textAlign: "center", marginTop: 16 }}>読み込み中...</p>}
+              {!dueHistoryQuery.isLoading && (dueHistoryQuery.data || []).length === 0 && (
+                <p style={{ fontSize: 13, color: "#c7d2fe", textAlign: "center", marginTop: 16 }}>日付変更履歴はまだありません</p>
+              )}
+              {(dueHistoryQuery.data || []).map((h: any) => (
+                <div key={h.id} style={{ background: "#f8f7ff", borderRadius: 10, padding: "10px 14px", marginBottom: 8, borderLeft: "3px solid #6366f1" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{h.createdAt ? new Date(h.createdAt).toLocaleString("ja-JP") : ""}</span>
+                    {h.changedBy && <span style={{ fontSize: 11, fontWeight: 700, color: "#6366f1" }}>{h.changedBy}</span>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                    <span style={{ color: "#ef4444", fontWeight: 700 }}>{h.prevDue || "なし"}</span>
+                    <span style={{ color: "#94a3b8" }}>→</span>
+                    <span style={{ color: "#22c55e", fontWeight: 700 }}>{h.newDue || "なし"}</span>
+                  </div>
+                </div>
+              ))}
             </>
           ) : (
             <>

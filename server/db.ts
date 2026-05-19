@@ -12,6 +12,7 @@ import {
   projectSessions, InsertProjectSession,
   attachments, InsertAttachment,
   subtaskTemplates, InsertSubtaskTemplate,
+  dueHistory, InsertDueHistory,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -217,6 +218,18 @@ export async function getTaskById(id: string) {
   if (!db) return null;
   const result = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
   return result.length > 0 ? result[0] : null;
+}
+
+export async function addDueHistory(data: InsertDueHistory) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(dueHistory).values(data);
+}
+
+export async function getDueHistory(taskId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(dueHistory).where(eq(dueHistory.taskId, taskId)).orderBy(dueHistory.createdAt);
 }
 
 // ─── Comment helpers ────────────────────────────────────────────────────────

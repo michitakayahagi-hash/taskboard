@@ -249,8 +249,20 @@ export const appRouter = router({
         prevCol: z.string().nullable().optional(),
         createdBy: z.string().nullable().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
+        // due変更時に履歴を記録
+        if (data.due !== undefined) {
+          try {
+            const current = await db.getTaskById(id);
+            const prevDue = current?.due ?? null;
+            const newDue = data.due ?? null;
+            if (prevDue !== newDue) {
+              const changedBy = (ctx as any)?.req?.cookies ? (() => { try { const raw = (ctx as any).req.cookies["tb_proj_session"]; if (raw) { const p = JSON.parse(Buffer.from(raw.split(".")[1] ?? "", "base64").toString()); return p?.name || undefined; } } catch { return undefined; } })() : undefined;
+              await db.addDueHistory({ taskId: id, prevDue, newDue, changedBy });
+            }
+          } catch (_) { /* 履歴記録エラーは無視 */ }
+        }
         await db.updateTask(id, data);
         // 完了カラムに移動した場合、100件超過分を古い順に自動削除
         if (data.colId) {
@@ -279,7 +291,16 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── Comments ───────────────────────────────────────────────────────────
+  // ─── Due History ─────────────────────────────────────────────────────────────────────
+  dueHistory: router({
+    list: publicProcedure
+      .input(z.object({ taskId: z.string() }))
+      .query(async ({ input }) => {
+        return db.getDueHistory(input.taskId);
+      }),
+  }),
+
+  // ─── Comments ───────────────────────────────────────────────────────────────────────
   comment: router({
     list: publicProcedure
       .input(z.object({ taskId: z.string() }))
