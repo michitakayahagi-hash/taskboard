@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: taskboard-backup
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: pnpm install && pnpm build
+    startCommand: node dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        sync: false   # Railway復旧後に手動で設定
+      - key: JWT_SECRET
+        sync: false   # Railway復旧後に手動で設定
+    healthCheckPath: /
