@@ -156,6 +156,41 @@ export async function deleteColumn(id: string) {
   await db.delete(columns).where(eq(columns.id, id));
 }
 
+/** カラム自体（タイトル・色・タスク）を別プロジェクトに移動する */
+export async function moveColumnToProject(colId: string, targetProjectId: string): Promise<{ newColId: string; movedCount: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+
+  // 元カラム情報を取得
+  const srcCol = await getColumnById(colId);
+  if (!srcCol) throw new Error("カラムが見つかりません");
+
+  // 移動先プロジェクトの既存カラム数を取得（sortOrder用）
+  const destCols = await getColumnsByProject(targetProjectId);
+  const maxSortOrder = destCols.length > 0 ? Math.max(...destCols.map((c: any) => c.sortOrder ?? 0)) + 1 : 0;
+
+  // 移動先に新しいカラムを作成（元と同じタイトル・色）
+  const newColId = "col" + Date.now();
+  await db.insert(columns).values({
+    id: newColId,
+    projectId: targetProjectId,
+    title: srcCol.title,
+    color: srcCol.color,
+    sortOrder: maxSortOrder,
+  });
+
+  // 元カラムのタスクを新カラムに移動
+  const colTasks = await getTasksByColId(colId);
+  for (const task of colTasks) {
+    await db.update(tasks).set({ projectId: targetProjectId, colId: newColId }).where(eq(tasks.id, task.id));
+  }
+
+  // 元カラムを削除（タスクは移動済みなので直接削除）
+  await db.delete(columns).where(eq(columns.id, colId));
+
+  return { newColId, movedCount: colTasks.length };
+}
+
 // ─── Task helpers ───────────────────────────────────────────────────────────
 export async function getTasksByProject(projectId: string) {
   const db = await getDb();

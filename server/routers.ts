@@ -315,37 +315,21 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── Column Move All Tasks ─────────────────────────────────────────────────────────────
+  // ─── Column Move (with column itself) ─────────────────────────────────────────────────────────────────────────────────────
   col: router({
+    // カラム自体（タイトル・色・タスク）を別プロジェクトに移動する（元カラムは削除）
     moveAllTasks: publicProcedure
       .input(z.object({
         colId: z.string(),
         targetProjectId: z.string(),
-        targetColId: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        let destColId: string;
-        if (input.targetColId) {
-          destColId = input.targetColId;
-        } else {
-          const targetCols = await db.getColumnsByProject(input.targetProjectId);
-          if (!targetCols || targetCols.length === 0) {
-            throw new TRPCError({ code: "BAD_REQUEST", message: "移動先プロジェクトにカラムが存在しません" });
-          }
-          destColId = targetCols[0].id;
-        }
-        const colTasks = await db.getTasksByColId(input.colId);
-        for (const task of colTasks) {
-          await db.updateTask(task.id, {
-            projectId: input.targetProjectId,
-            colId: destColId,
-          });
-        }
-        return { success: true, movedCount: colTasks.length, newColId: destColId };
+        const result = await db.moveColumnToProject(input.colId, input.targetProjectId);
+        return { success: true, movedCount: result.movedCount, newColId: result.newColId };
       }),
   }),
 
-  // ─── Due History ─────────────────────────────────────────────────────────────────────
+  // ─── Due History ──────────────────────────────────────────────────────────────────────────────────────
   dueHistory: router({
     list: publicProcedure
       .input(z.object({ taskId: z.string() }))
