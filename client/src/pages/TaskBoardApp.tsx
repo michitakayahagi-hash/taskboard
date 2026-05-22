@@ -298,10 +298,16 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
   onUpdateDescription: (taskId: string, desc: string) => void;
   onUpdateField: (id: string, field: string, value: unknown) => void;
   onDeleteTask?: (taskId: string) => void;
-  onMoveTask?: (taskId: string, targetProjectId: string) => void;
+  onMoveTask?: (taskId: string, targetProjectId: string, targetColId: string) => void;
   allProjects?: ProjectType[];
 }) {
   const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [moveStep, setMoveStep] = useState<"project" | "col">("project");
+  const [selectedMoveProject, setSelectedMoveProject] = useState<ProjectType | null>(null);
+  const targetColsQuery = trpc.column.list.useQuery(
+    { projectId: selectedMoveProject?.id ?? "" },
+    { enabled: !!selectedMoveProject }
+  );
   const [tab, setTab] = useState<"subtasks" | "comments" | "attachments" | "dueHistory">("subtasks");
   const dueHistoryQuery = trpc.dueHistory.list.useQuery({ taskId: task.id }, { enabled: tab === "dueHistory" });
   const [newSub, setNewSub] = useState("");
@@ -397,31 +403,58 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
             {onMoveTask && allProjects && allProjects.length > 0 && (
               <div style={{ position: "relative" }}>
                 <button
-                  onClick={() => setShowMoveMenu((v) => !v)}
+                  onClick={() => { setShowMoveMenu((v) => !v); setMoveStep("project"); setSelectedMoveProject(null); }}
                   title="別プロジェクトに移動"
                   style={{ background: "#f0fdf4", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 14, color: "#10b981" }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "#dcfce7")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "#f0fdf4")}
                 >📦</button>
                 {showMoveMenu && (
-                  <div style={{ position: "absolute", top: "110%", right: 0, background: "#fff", border: "1.5px solid #e0e7ff", borderRadius: 12, boxShadow: "0 8px 24px rgba(99,102,241,.15)", zIndex: 2000, minWidth: 180, padding: 8 }}>
-                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, padding: "4px 8px 6px" }}>移動先プロジェクト</div>
-                    {allProjects.map((p) => (
-                      <button key={p.id}
-                        onClick={() => {
-                          if (window.confirm(`「${task.title}」を「${p.name}」に移動しますか？`)) {
-                            onMoveTask(task.id, p.id);
-                          }
-                          setShowMoveMenu(false);
-                        }}
-                        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", fontSize: 13, color: "#1e1b4b", textAlign: "left" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f3ff")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-                      >
-                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: p.color, flexShrink: 0, display: "inline-block" }} />
-                        {p.name}
-                      </button>
-                    ))}
+                  <div style={{ position: "absolute", top: "110%", right: 0, background: "#fff", border: "1.5px solid #e0e7ff", borderRadius: 12, boxShadow: "0 8px 24px rgba(99,102,241,.15)", zIndex: 2000, minWidth: 200, padding: 8 }}
+                    onClick={(e) => e.stopPropagation()}>
+                    {moveStep === "project" && (
+                      <>
+                        <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, padding: "4px 8px 6px", borderBottom: "1px solid #f0f0ff" }}>📦 移動先プロジェクト</div>
+                        {allProjects.map((p) => (
+                          <button key={p.id}
+                            onClick={() => { setSelectedMoveProject(p); setMoveStep("col"); }}
+                            style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", fontSize: 13, color: "#1e1b4b", textAlign: "left" }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f3ff")}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+                            <span style={{ width: 10, height: 10, borderRadius: "50%", background: p.color, flexShrink: 0, display: "inline-block" }} />
+                            {p.name} ›
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {moveStep === "col" && selectedMoveProject && (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px 6px", borderBottom: "1px solid #f0f0ff" }}>
+                          <button onClick={() => setMoveStep("project")} style={{ background: "none", border: "none", cursor: "pointer", color: "#6366f1", fontSize: 13, padding: 0 }}>←</button>
+                          <span style={{ fontSize: 11, color: "#6366f1", fontWeight: 700 }}>
+                            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: selectedMoveProject.color, marginRight: 5 }} />
+                            {selectedMoveProject.name}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, padding: "4px 8px 4px" }}>カラムを選択</div>
+                        {targetColsQuery.isLoading && <div style={{ padding: "8px 12px", fontSize: 12, color: "#94a3b8" }}>読み込み中...</div>}
+                        {(targetColsQuery.data || []).map((c) => (
+                          <button key={c.id}
+                            onClick={() => {
+                              if (window.confirm(`「${task.title}」を「${selectedMoveProject.name}」の「${c.title}」に移動しますか？`)) {
+                                onMoveTask(task.id, selectedMoveProject.id, c.id);
+                                setShowMoveMenu(false);
+                              }
+                            }}
+                            style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", fontSize: 13, color: "#1e1b4b", textAlign: "left" }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f3ff")}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+                            <span style={{ width: 10, height: 10, borderRadius: "50%", background: c.color || "#6366f1", flexShrink: 0, display: "inline-block" }} />
+                            {c.title}
+                          </button>
+                        ))}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -798,13 +831,19 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
   onColDragOver: (colId: string) => void;
   onColDrop: () => void;
   colDraggingId: string | null;
-  onMoveColTasks?: (colId: string, targetProjectId: string) => void;
+  onMoveColTasks?: (colId: string, targetProjectId: string, targetColId: string) => void;
   allProjects?: ProjectType[];
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(col.title);
   const [sortByDue, setSortByDue] = useState(true);
   const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [colMoveStep, setColMoveStep] = useState<"project" | "col">("project");
+  const [colMoveTargetProject, setColMoveTargetProject] = useState<ProjectType | null>(null);
+  const colTargetColsQuery = trpc.column.list.useQuery(
+    { projectId: colMoveTargetProject?.id ?? "" },
+    { enabled: !!colMoveTargetProject }
+  );
   const isOver = dropTarget?.col === col.id;
   const insertIdx = isOver ? dropTarget!.index : -1;
   const isColDragging = colDraggingId === col.id;
@@ -850,7 +889,7 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
         {onMoveColTasks && allProjects && allProjects.length > 0 && tasks.length > 0 && (
           <div style={{ position: "relative", flexShrink: 0 }}>
             <button
-              onClick={(e) => { e.stopPropagation(); setShowMoveMenu((v) => !v); }}
+              onClick={(e) => { e.stopPropagation(); setShowMoveMenu((v) => !v); setColMoveStep("project"); setColMoveTargetProject(null); }}
               title={`このカラムの${tasks.length}件を別プロジェクトへ移動`}
               style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "0 2px", lineHeight: "1" }}
               onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")}
@@ -858,22 +897,48 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
               📦
             </button>
             {showMoveMenu && (
-              <div style={{ position: "absolute", top: "100%", right: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e0e7ff", borderRadius: 10, boxShadow: "0 4px 20px rgba(99,102,241,.18)", minWidth: 180, padding: "6px 0" }}
+              <div style={{ position: "absolute", top: "100%", right: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e0e7ff", borderRadius: 10, boxShadow: "0 4px 20px rgba(99,102,241,.18)", minWidth: 200, padding: "6px 0" }}
                 onClick={(e) => e.stopPropagation()}>
-                <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, padding: "4px 12px 6px", borderBottom: "1px solid #f0f0ff", fontFamily: "'Noto Sans JP',sans-serif" }}>📦 移動先プロジェクト</div>
-                {allProjects.map((p) => (
-                  <button key={p.id} onClick={() => {
-                    if (window.confirm(`「${col.title}」の${tasks.length}件を「${p.name}」に移動しますか？`)) {
-                      onMoveColTasks(col.id, p.id);
-                      setShowMoveMenu(false);
-                    }
-                  }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", fontWeight: 600 }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f3ff")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                    <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: p.color, marginRight: 7, verticalAlign: "middle" }} />
-                    {p.name}
-                  </button>
-                ))}
+                {colMoveStep === "project" && (
+                  <>
+                    <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, padding: "4px 12px 6px", borderBottom: "1px solid #f0f0ff", fontFamily: "'Noto Sans JP',sans-serif" }}>📦 移動先プロジェクト</div>
+                    {allProjects.map((p) => (
+                      <button key={p.id} onClick={() => { setColMoveTargetProject(p); setColMoveStep("col"); }}
+                        style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", fontWeight: 600 }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f3ff")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+                        <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: p.color, marginRight: 7, verticalAlign: "middle" }} />
+                        {p.name} ›
+                      </button>
+                    ))}
+                  </>
+                )}
+                {colMoveStep === "col" && colMoveTargetProject && (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 12px 6px", borderBottom: "1px solid #f0f0ff" }}>
+                      <button onClick={() => setColMoveStep("project")} style={{ background: "none", border: "none", cursor: "pointer", color: "#6366f1", fontSize: 13, padding: 0, fontFamily: "'Noto Sans JP',sans-serif" }}>←</button>
+                      <span style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, fontFamily: "'Noto Sans JP',sans-serif" }}>
+                        <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: colMoveTargetProject.color, marginRight: 5 }} />
+                        {colMoveTargetProject.name}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, padding: "4px 12px 4px", fontFamily: "'Noto Sans JP',sans-serif" }}>カラムを選択</div>
+                    {colTargetColsQuery.isLoading && <div style={{ padding: "8px 14px", fontSize: 12, color: "#94a3b8" }}>読み込み中...</div>}
+                    {(colTargetColsQuery.data || []).map((c) => (
+                      <button key={c.id} onClick={() => {
+                        if (window.confirm(`「${col.title}」の${tasks.length}件を「${colMoveTargetProject.name}」の「${c.title}」に移動しますか？`)) {
+                          onMoveColTasks(col.id, colMoveTargetProject.id, c.id);
+                          setShowMoveMenu(false);
+                        }
+                      }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", fontWeight: 600 }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f3ff")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+                        <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: c.color || "#6366f1", marginRight: 7, verticalAlign: "middle" }} />
+                        {c.title}
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1662,7 +1727,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
             onUpdateField={onUpdateField} onAddTask={(colId) => setModal({ defaultCol: colId })} onUpdateColTitle={updateColTitle} onDeleteCol={deleteCol}
             colRef={(el) => { colRefs.current[col.id] = el; }} cardRefs={cardRefs}
             onColDragStart={onColDragStart} onColDragOver={onColDragOver} onColDrop={onColDrop} colDraggingId={colDraggingId}
-            onMoveColTasks={canEdit ? (colId, targetProjectId) => { moveColTasks.mutate({ colId, targetProjectId }); } : undefined}
+            onMoveColTasks={canEdit ? (colId, targetProjectId, targetColId) => { moveColTasks.mutate({ colId, targetProjectId, targetColId }); } : undefined}
             allProjects={allProjects?.filter(p => p.id !== project.id) || []} />
         ))}
       </div>
@@ -1694,7 +1759,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
         </div>
       )}
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} currentUser={projectSession?.name || members[0] || ""} onClose={() => setModal(null)} onSave={saveTask} />}
-      {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} onMoveTask={canEdit ? (id, targetProjectId) => { moveTask.mutate({ id, targetProjectId }); setDetailTask(null); } : undefined} allProjects={allProjects?.filter(p => p.id !== project.id) || []} />}
+      {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} onMoveTask={canEdit ? (id, targetProjectId, targetColId) => { moveTask.mutate({ id, targetProjectId, targetColId }); setDetailTask(null); } : undefined} allProjects={allProjects?.filter(p => p.id !== project.id) || []} />}
       {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isPublic={(project as any).isPublic ?? false} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </div>

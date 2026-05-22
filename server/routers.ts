@@ -293,20 +293,25 @@ export const appRouter = router({
       .input(z.object({
         id: z.string(),
         targetProjectId: z.string(),
+        targetColId: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        // 移動先プロジェクトの最初のカラムを取得
-        const targetCols = await db.getColumnsByProject(input.targetProjectId);
-        if (!targetCols || targetCols.length === 0) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "移動先プロジェクトにカラムが存在しません" });
+        let colId: string;
+        if (input.targetColId) {
+          colId = input.targetColId;
+        } else {
+          // 移動先プロジェクトの最初のカラムを取得
+          const targetCols = await db.getColumnsByProject(input.targetProjectId);
+          if (!targetCols || targetCols.length === 0) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "移動先プロジェクトにカラムが存在しません" });
+          }
+          colId = targetCols[0].id;
         }
-        const firstCol = targetCols[0];
-        // タスクのprojectIdとcolIdを更新
         await db.updateTask(input.id, {
           projectId: input.targetProjectId,
-          colId: firstCol.id,
+          colId,
         });
-        return { success: true, newColId: firstCol.id };
+        return { success: true, newColId: colId };
       }),
   }),
 
@@ -316,23 +321,27 @@ export const appRouter = router({
       .input(z.object({
         colId: z.string(),
         targetProjectId: z.string(),
+        targetColId: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        // 移動先プロジェクトの最初のカラムを取得
-        const targetCols = await db.getColumnsByProject(input.targetProjectId);
-        if (!targetCols || targetCols.length === 0) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "移動先プロジェクトにカラムが存在しません" });
+        let destColId: string;
+        if (input.targetColId) {
+          destColId = input.targetColId;
+        } else {
+          const targetCols = await db.getColumnsByProject(input.targetProjectId);
+          if (!targetCols || targetCols.length === 0) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "移動先プロジェクトにカラムが存在しません" });
+          }
+          destColId = targetCols[0].id;
         }
-        const firstCol = targetCols[0];
-        // カラム内の全タスクを取得して移動
         const colTasks = await db.getTasksByColId(input.colId);
         for (const task of colTasks) {
           await db.updateTask(task.id, {
             projectId: input.targetProjectId,
-            colId: firstCol.id,
+            colId: destColId,
           });
         }
-        return { success: true, movedCount: colTasks.length, newColId: firstCol.id };
+        return { success: true, movedCount: colTasks.length, newColId: destColId };
       }),
   }),
 
