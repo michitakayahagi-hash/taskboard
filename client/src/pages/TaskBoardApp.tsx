@@ -781,7 +781,7 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
 }
 
 // ─── Column ───────────────────────────────────────────────────────────────────
-function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs, onColDragStart, onColDragOver, onColDrop, colDraggingId }: {
+function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs, onColDragStart, onColDragOver, onColDrop, colDraggingId, onMoveColTasks, allProjects }: {
   col: Col; tasks: TaskType[]; draggingId: string | null; dropTarget: { col: string; index: number } | null; members: string[]; doneColIds: string[];
   onPointerDown: (e: React.PointerEvent, task: TaskType) => void;
   onCardClick: (task: TaskType) => void;
@@ -798,10 +798,13 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
   onColDragOver: (colId: string) => void;
   onColDrop: () => void;
   colDraggingId: string | null;
+  onMoveColTasks?: (colId: string, targetProjectId: string) => void;
+  allProjects?: ProjectType[];
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(col.title);
   const [sortByDue, setSortByDue] = useState(true);
+  const [showMoveMenu, setShowMoveMenu] = useState(false);
   const isOver = dropTarget?.col === col.id;
   const insertIdx = isOver ? dropTarget!.index : -1;
   const isColDragging = colDraggingId === col.id;
@@ -843,6 +846,37 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
             onMouseLeave={(e) => { if (!sortByDue) e.currentTarget.style.color = "#c7d2fe"; }}>
             📅
           </button>
+        )}
+        {onMoveColTasks && allProjects && allProjects.length > 0 && tasks.length > 0 && (
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowMoveMenu((v) => !v); }}
+              title={`このカラムの${tasks.length}件を別プロジェクトへ移動`}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "0 2px", lineHeight: "1" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>
+              📦
+            </button>
+            {showMoveMenu && (
+              <div style={{ position: "absolute", top: "100%", right: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e0e7ff", borderRadius: 10, boxShadow: "0 4px 20px rgba(99,102,241,.18)", minWidth: 180, padding: "6px 0" }}
+                onClick={(e) => e.stopPropagation()}>
+                <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, padding: "4px 12px 6px", borderBottom: "1px solid #f0f0ff", fontFamily: "'Noto Sans JP',sans-serif" }}>📦 移動先プロジェクト</div>
+                {allProjects.map((p) => (
+                  <button key={p.id} onClick={() => {
+                    if (window.confirm(`「${col.title}」の${tasks.length}件を「${p.name}」に移動しますか？`)) {
+                      onMoveColTasks(col.id, p.id);
+                      setShowMoveMenu(false);
+                    }
+                  }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", fontWeight: 600 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f3ff")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+                    <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: p.color, marginRight: 7, verticalAlign: "middle" }} />
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         {col.title !== "完了" && (
           <button onClick={() => onDeleteCol(col.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 14, padding: 0, lineHeight: "1" }}
@@ -1278,6 +1312,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   const createComment = trpc.comment.create.useMutation({ onSuccess: (_d, vars) => utils.comment.list.invalidate({ taskId: vars.taskId }) });
   const deleteTask = trpc.task.delete.useMutation({ onSuccess: () => utils.task.list.invalidate({ projectId: project.id }) });
   const moveTask = trpc.task.move.useMutation({ onSuccess: () => utils.task.list.invalidate({ projectId: project.id }) });
+  const moveColTasks = trpc.col.moveAllTasks.useMutation({ onSuccess: () => utils.task.list.invalidate({ projectId: project.id }) });
   const setSetting = trpc.setting.set.useMutation({ onSuccess: () => { utils.setting.get.invalidate(); } });
 
   const [modal, setModal] = useState<{ defaultCol: string } | null>(null);
@@ -1626,7 +1661,9 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
             onPointerDown={onPointerDown} onCardClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={setDetailTask}
             onUpdateField={onUpdateField} onAddTask={(colId) => setModal({ defaultCol: colId })} onUpdateColTitle={updateColTitle} onDeleteCol={deleteCol}
             colRef={(el) => { colRefs.current[col.id] = el; }} cardRefs={cardRefs}
-            onColDragStart={onColDragStart} onColDragOver={onColDragOver} onColDrop={onColDrop} colDraggingId={colDraggingId} />
+            onColDragStart={onColDragStart} onColDragOver={onColDragOver} onColDrop={onColDrop} colDraggingId={colDraggingId}
+            onMoveColTasks={canEdit ? (colId, targetProjectId) => { moveColTasks.mutate({ colId, targetProjectId }); } : undefined}
+            allProjects={allProjects?.filter(p => p.id !== project.id) || []} />
         ))}
       </div>
       {/* スクロールインジケーター（ドット）—スマホ向け */}

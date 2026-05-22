@@ -310,6 +310,32 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── Column Move All Tasks ─────────────────────────────────────────────────────────────
+  col: router({
+    moveAllTasks: publicProcedure
+      .input(z.object({
+        colId: z.string(),
+        targetProjectId: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        // 移動先プロジェクトの最初のカラムを取得
+        const targetCols = await db.getColumnsByProject(input.targetProjectId);
+        if (!targetCols || targetCols.length === 0) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "移動先プロジェクトにカラムが存在しません" });
+        }
+        const firstCol = targetCols[0];
+        // カラム内の全タスクを取得して移動
+        const colTasks = await db.getTasksByColId(input.colId);
+        for (const task of colTasks) {
+          await db.updateTask(task.id, {
+            projectId: input.targetProjectId,
+            colId: firstCol.id,
+          });
+        }
+        return { success: true, movedCount: colTasks.length, newColId: firstCol.id };
+      }),
+  }),
+
   // ─── Due History ─────────────────────────────────────────────────────────────────────
   dueHistory: router({
     list: publicProcedure
