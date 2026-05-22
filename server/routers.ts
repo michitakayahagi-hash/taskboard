@@ -289,6 +289,25 @@ export const appRouter = router({
         await db.deleteTask(input.id);
         return { success: true };
       }),
+    move: publicProcedure
+      .input(z.object({
+        id: z.string(),
+        targetProjectId: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        // 移動先プロジェクトの最初のカラムを取得
+        const targetCols = await db.getColumnsByProject(input.targetProjectId);
+        if (!targetCols || targetCols.length === 0) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "移動先プロジェクトにカラムが存在しません" });
+        }
+        const firstCol = targetCols[0];
+        // タスクのprojectIdとcolIdを更新
+        await db.updateTask(input.id, {
+          projectId: input.targetProjectId,
+          colId: firstCol.id,
+        });
+        return { success: true, newColId: firstCol.id };
+      }),
   }),
 
   // ─── Due History ─────────────────────────────────────────────────────────────────────

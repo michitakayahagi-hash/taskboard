@@ -290,7 +290,7 @@ function DescriptionField({ task, onUpdateDescription }: { task: TaskType; onUpd
 }
 
 // ─── TaskDetailModal ────────────────────────────────────────────────────────────
-function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, onAddComment, onUpdateSubtasks, onUpdateDescription, onUpdateField, onDeleteTask }: {
+function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, onAddComment, onUpdateSubtasks, onUpdateDescription, onUpdateField, onDeleteTask, onMoveTask, allProjects }: {
   task: TaskType; cols: Col[]; webhookUrl: string; members: string[]; projectId: string;
   onClose: () => void;
   onAddComment: (taskId: string, comment: CommentType) => void;
@@ -298,7 +298,10 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
   onUpdateDescription: (taskId: string, desc: string) => void;
   onUpdateField: (id: string, field: string, value: unknown) => void;
   onDeleteTask?: (taskId: string) => void;
+  onMoveTask?: (taskId: string, targetProjectId: string) => void;
+  allProjects?: ProjectType[];
 }) {
+  const [showMoveMenu, setShowMoveMenu] = useState(false);
   const [tab, setTab] = useState<"subtasks" | "comments" | "attachments" | "dueHistory">("subtasks");
   const dueHistoryQuery = trpc.dueHistory.list.useQuery({ taskId: task.id }, { enabled: tab === "dueHistory" });
   const [newSub, setNewSub] = useState("");
@@ -391,6 +394,38 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <button onClick={copyShareLink} title="共有リンクをコピー" style={{ background: "#ede9fe", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 14, color: "#6366f1" }}>🔗</button>
+            {onMoveTask && allProjects && allProjects.length > 0 && (
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setShowMoveMenu((v) => !v)}
+                  title="別プロジェクトに移動"
+                  style={{ background: "#f0fdf4", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 14, color: "#10b981" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#dcfce7")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "#f0fdf4")}
+                >📦</button>
+                {showMoveMenu && (
+                  <div style={{ position: "absolute", top: "110%", right: 0, background: "#fff", border: "1.5px solid #e0e7ff", borderRadius: 12, boxShadow: "0 8px 24px rgba(99,102,241,.15)", zIndex: 2000, minWidth: 180, padding: 8 }}>
+                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, padding: "4px 8px 6px" }}>移動先プロジェクト</div>
+                    {allProjects.map((p) => (
+                      <button key={p.id}
+                        onClick={() => {
+                          if (window.confirm(`「${task.title}」を「${p.name}」に移動しますか？`)) {
+                            onMoveTask(task.id, p.id);
+                          }
+                          setShowMoveMenu(false);
+                        }}
+                        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", fontSize: 13, color: "#1e1b4b", textAlign: "left" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f3ff")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                      >
+                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: p.color, flexShrink: 0, display: "inline-block" }} />
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {onDeleteTask && (
               <button
                 onClick={() => {
@@ -1150,7 +1185,7 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
 }
 
 // ─── BoardView (Access Control Wrapper) ────────────────────────────────────────────────────────────────────────────────────
-function BoardView({ project, onBack }: { project: ProjectType; onBack: () => void }) {
+function BoardView({ project, onBack, allProjects }: { project: ProjectType; onBack: () => void; allProjects: ProjectType[] }) {
   const utils = trpc.useUtils();
   const restrictionQuery = trpc.projectAccess.hasRestriction.useQuery({ projectId: project.id });
   const sessionQuery = trpc.projectAccess.getSession.useQuery({ projectId: project.id });
@@ -1190,14 +1225,16 @@ function BoardView({ project, onBack }: { project: ProjectType; onBack: () => vo
       isRestricted={isRestricted}
       projectSession={projectSession ?? null}
       onLogout={() => logoutProject.mutate({ projectId: project.id })}
+      allProjects={allProjects}
     />
   );
 }
 
-function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession, onLogout }: {
+function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession, onLogout, allProjects }: {
   project: ProjectType; onBack: () => void;
   canEdit: boolean; isRestricted: boolean;
   projectSession: { name: string; role: string; isAdmin?: boolean } | null;
+  allProjects?: ProjectType[];
   onLogout: () => void;
 }) {
   const utils = trpc.useUtils();
@@ -1240,6 +1277,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   });
   const createComment = trpc.comment.create.useMutation({ onSuccess: (_d, vars) => utils.comment.list.invalidate({ taskId: vars.taskId }) });
   const deleteTask = trpc.task.delete.useMutation({ onSuccess: () => utils.task.list.invalidate({ projectId: project.id }) });
+  const moveTask = trpc.task.move.useMutation({ onSuccess: () => utils.task.list.invalidate({ projectId: project.id }) });
   const setSetting = trpc.setting.set.useMutation({ onSuccess: () => { utils.setting.get.invalidate(); } });
 
   const [modal, setModal] = useState<{ defaultCol: string } | null>(null);
@@ -1619,7 +1657,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
         </div>
       )}
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} currentUser={projectSession?.name || members[0] || ""} onClose={() => setModal(null)} onSave={saveTask} />}
-      {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} />}
+      {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} onMoveTask={canEdit ? (id, targetProjectId) => { moveTask.mutate({ id, targetProjectId }); setDetailTask(null); } : undefined} allProjects={allProjects?.filter(p => p.id !== project.id) || []} />}
       {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isPublic={(project as any).isPublic ?? false} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </div>
@@ -1701,7 +1739,7 @@ export default function TaskBoardApp() {
   }
 
   if (currentProject) {
-    return <BoardView project={currentProject} onBack={() => setCurrentProjectId(null)} />;
+    return <BoardView project={currentProject} onBack={() => setCurrentProjectId(null)} allProjects={projects} />;
   }
 
   if (showAssigneeView) {
