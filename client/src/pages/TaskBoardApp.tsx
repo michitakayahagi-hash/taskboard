@@ -731,7 +731,7 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
   const overdue = !isDone && task.due && new Date(task.due) < new Date(new Date().toDateString());
   return (
     <div onPointerDown={(e) => onPointerDown(e, task)} onClick={() => onClick(task)}
-      style={{ background: dragging ? "#f0f0ff" : isDone ? "#f3f4f6" : overdue ? "#fff5f5" : "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, boxShadow: dragging ? "0 0 0 2px #6366f1, 0 8px 24px rgba(99,102,241,.2)" : isDone ? "none" : overdue ? "0 0 0 2px #ef4444, 0 2px 8px rgba(239,68,68,.18)" : "0 1px 4px rgba(99,102,241,.08)", borderLeft: isDone ? "3px solid #d1d5db" : overdue ? "4px solid #ef4444" : `3px solid ${p.color}`, cursor: dragging ? "grabbing" : "grab", opacity: isDone ? 0.6 : dragging ? 0.4 : 1, transition: "box-shadow .12s,opacity .12s,background .12s", touchAction: "auto" }}>
+      style={{ background: dragging ? "#f0f0ff" : isDone ? "#f3f4f6" : overdue ? "#fff5f5" : "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, boxShadow: dragging ? "0 0 0 2px #6366f1, 0 8px 24px rgba(99,102,241,.2)" : isDone ? "none" : overdue ? "0 0 0 2px #ef4444, 0 2px 8px rgba(239,68,68,.18)" : "0 1px 4px rgba(99,102,241,.08)", borderLeft: isDone ? "3px solid #d1d5db" : overdue ? "4px solid #ef4444" : `3px solid ${p.color}`, cursor: dragging ? "grabbing" : "grab", opacity: isDone ? 0.6 : dragging ? 0.4 : 1, transition: "box-shadow .12s,opacity .12s,background .12s", touchAction: "pan-x pan-y" }}>
       <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: isDone ? "#9ca3af" : overdue ? "#b91c1c" : "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif", lineHeight: 1.4, textDecoration: isDone ? "line-through" : "none" }}>{overdue && <span style={{ marginRight: 4 }}>🚨</span>}{task.title}</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: task.due ? 4 : 8 }}>
         <span style={{ background: p.color + "18", color: p.color, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20 }}>{p.label}</span>
@@ -1520,24 +1520,27 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
         // バイブレーション（対応デバイスのみ）
         if (navigator.vibrate) navigator.vibrate(50);
         startDrag(dragRef.current.startX, dragRef.current.startY);
+        document.removeEventListener("touchmove", cancelLongPress);
+        document.removeEventListener("touchend", cancelOnUp);
       }, 500);
       // 長押し前に指が動いたらキャンセル（スクロール優先）
-      const cancelLongPress = (ev: PointerEvent) => {
-        const dx = ev.clientX - dragRef.current.startX;
-        const dy = ev.clientY - dragRef.current.startY;
-        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+      // touchmoveを使うことでtouchAction: pan-x pan-yでもスクロールを妨げない
+      const cancelLongPress = (ev: TouchEvent) => {
+        const dx = ev.touches[0].clientX - dragRef.current.startX;
+        const dy = ev.touches[0].clientY - dragRef.current.startY;
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
           if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
-          document.removeEventListener("pointermove", cancelLongPress);
-          document.removeEventListener("pointerup", cancelOnUp);
+          document.removeEventListener("touchmove", cancelLongPress);
+          document.removeEventListener("touchend", cancelOnUp);
         }
       };
       const cancelOnUp = () => {
         if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
-        document.removeEventListener("pointermove", cancelLongPress);
-        document.removeEventListener("pointerup", cancelOnUp);
+        document.removeEventListener("touchmove", cancelLongPress);
+        document.removeEventListener("touchend", cancelOnUp);
       };
-      document.addEventListener("pointermove", cancelLongPress);
-      document.addEventListener("pointerup", cancelOnUp);
+      document.addEventListener("touchmove", cancelLongPress, { passive: true });
+      document.addEventListener("touchend", cancelOnUp);
     } else {
       // マウス: 従来通り即座にドラッグ開始
       e.preventDefault();
