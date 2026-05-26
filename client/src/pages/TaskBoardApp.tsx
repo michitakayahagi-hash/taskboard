@@ -818,7 +818,7 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
 }
 
 // ─── Column ───────────────────────────────────────────────────────────────────
-function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs, onColDragStart, onColDragOver, onColDrop, colDraggingId, onMoveColTasks, allProjects, onMoveTaskLeft, onMoveTaskRight, canMoveLeft, canMoveRight }: {
+function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs, onColDragStart, onColDragOver, onColDrop, colDraggingId, onMoveColTasks, allProjects, onMoveColLeft, onMoveColRight, canMoveLeft, canMoveRight }: {
   col: Col; tasks: TaskType[]; draggingId: string | null; dropTarget: { col: string; index: number } | null; members: string[]; doneColIds: string[];
   onPointerDown: (e: React.PointerEvent, task: TaskType) => void;
   onCardClick: (task: TaskType) => void;
@@ -837,8 +837,8 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
   colDraggingId: string | null;
   onMoveColTasks?: (colId: string, targetProjectId: string, targetColId: string) => void;
   allProjects?: ProjectType[];
-  onMoveTaskLeft?: (task: TaskType) => void;
-  onMoveTaskRight?: (task: TaskType) => void;
+  onMoveColLeft?: () => void;
+  onMoveColRight?: () => void;
   canMoveLeft?: boolean;
   canMoveRight?: boolean;
 }) {
@@ -920,6 +920,14 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
             )}
           </div>
         )}
+        {canMoveLeft && onMoveColLeft && (
+          <button onClick={(e) => { e.stopPropagation(); onMoveColLeft(); }} title="カラムを左へ" style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 14, padding: "0 1px", lineHeight: "1", flexShrink: 0 }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")} onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>←</button>
+        )}
+        {canMoveRight && onMoveColRight && (
+          <button onClick={(e) => { e.stopPropagation(); onMoveColRight(); }} title="カラムを右へ" style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 14, padding: "0 1px", lineHeight: "1", flexShrink: 0 }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")} onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>→</button>
+        )}
         {col.title !== "完了" && (
           <button onClick={() => onDeleteCol(col.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 14, padding: 0, lineHeight: "1" }}
             onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
@@ -932,7 +940,7 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
         {insertIdx === 0 && <DropLine />}
         {displayTasks.map((task, i) => (
           <div key={task.id} ref={(el) => { cardRefs.current[task.id] = el; }}>
-            <TaskCard task={task} dragging={draggingId === task.id} members={members} doneColIds={doneColIds} onPointerDown={onPointerDown} onClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={onComment} onUpdateField={onUpdateField} onMoveLeft={canMoveLeft ? onMoveTaskLeft : undefined} onMoveRight={canMoveRight ? onMoveTaskRight : undefined} />
+            <TaskCard task={task} dragging={draggingId === task.id} members={members} doneColIds={doneColIds} onPointerDown={onPointerDown} onClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={onComment} onUpdateField={onUpdateField} />
             {insertIdx === i + 1 && <DropLine />}
           </div>
         ))}
@@ -1716,8 +1724,24 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
               allProjects={allProjects?.filter(p => p.id !== project.id) || []}
               canMoveLeft={canEdit && !!prevCol}
               canMoveRight={canEdit && !!nextCol}
-              onMoveTaskLeft={canEdit && prevCol ? (task) => updateTask.mutate({ id: task.id, colId: prevCol.id }) : undefined}
-              onMoveTaskRight={canEdit && nextCol ? (task) => updateTask.mutate({ id: task.id, colId: nextCol.id }) : undefined}
+              onMoveColLeft={canEdit && prevCol ? () => {
+                const sorted = [...cols].sort((a, b) => a.sortOrder - b.sortOrder);
+                const fi = sorted.findIndex((c) => c.id === col.id);
+                const ti = sorted.findIndex((c) => c.id === prevCol.id);
+                if (fi === -1 || ti === -1) return;
+                const newOrder = [...sorted];
+                [newOrder[fi], newOrder[ti]] = [newOrder[ti], newOrder[fi]];
+                newOrder.forEach((c, i) => updateCol.mutate({ id: c.id, sortOrder: i }));
+              } : undefined}
+              onMoveColRight={canEdit && nextCol ? () => {
+                const sorted = [...cols].sort((a, b) => a.sortOrder - b.sortOrder);
+                const fi = sorted.findIndex((c) => c.id === col.id);
+                const ti = sorted.findIndex((c) => c.id === nextCol.id);
+                if (fi === -1 || ti === -1) return;
+                const newOrder = [...sorted];
+                [newOrder[fi], newOrder[ti]] = [newOrder[ti], newOrder[fi]];
+                newOrder.forEach((c, i) => updateCol.mutate({ id: c.id, sortOrder: i }));
+              } : undefined}
             />
           );
         })}
