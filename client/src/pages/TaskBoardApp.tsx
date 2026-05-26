@@ -717,7 +717,7 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
 }
 
 // ─── TaskCard ────────────────────────────────────────────────────────────────
-function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick, onComplete, onRevert, onComment, onUpdateField }: {
+function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick, onComplete, onRevert, onComment, onUpdateField, onMoveLeft, onMoveRight }: {
   task: TaskType; dragging: boolean; members: string[]; doneColIds: string[];
   onPointerDown: (e: React.PointerEvent, task: TaskType) => void;
   onClick: (task: TaskType) => void;
@@ -725,6 +725,8 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
   onRevert: (task: TaskType) => void;
   onComment: (task: TaskType) => void;
   onUpdateField: (id: string, field: string, value: unknown) => void;
+  onMoveLeft?: (task: TaskType) => void;
+  onMoveRight?: (task: TaskType) => void;
 }) {
   const p = PRI[task.priority] || PRI.medium;
   const isDone = doneColIds.includes(task.colId);
@@ -803,7 +805,9 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
         })()}
         <CustomDatePicker value={task.due || ""} onChange={(v) => onUpdateField(task.id, "due", v)} style={{ minWidth: 0, flex: "1 1 0", overflow: "hidden" }} />
       </div>
-      <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+      <div style={{ display: "flex", gap: 5, justifyContent: "flex-end", alignItems: "center" }}>
+        {onMoveLeft && <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onMoveLeft(task); }} title="左のカラムへ移動" style={{ fontSize: 13, fontWeight: 700, color: "#6366f1", background: "#ede9fe", border: "1.5px solid #c4b5fd", borderRadius: 8, padding: "3px 8px", cursor: "pointer", lineHeight: 1 }}>←</button>}
+        {onMoveRight && <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onMoveRight(task); }} title="右のカラムへ移動" style={{ fontSize: 13, fontWeight: 700, color: "#6366f1", background: "#ede9fe", border: "1.5px solid #c4b5fd", borderRadius: 8, padding: "3px 8px", cursor: "pointer", lineHeight: 1 }}>→</button>}
         <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onComment(task); }} style={{ fontSize: 11, fontWeight: 700, color: "#1877F2", background: "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: 8, padding: "4px 9px", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", flexShrink: 0 }}>💬 コメント</button>
         {isDone
           ? <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onRevert(task); }} style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", background: "#f1f5f9", border: "none", borderRadius: 8, padding: "4px 9px", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>↩ 戻す</button>
@@ -814,7 +818,7 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
 }
 
 // ─── Column ───────────────────────────────────────────────────────────────────
-function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs, onColDragStart, onColDragOver, onColDrop, colDraggingId, onMoveColTasks, allProjects }: {
+function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs, onColDragStart, onColDragOver, onColDrop, colDraggingId, onMoveColTasks, allProjects, onMoveTaskLeft, onMoveTaskRight, canMoveLeft, canMoveRight }: {
   col: Col; tasks: TaskType[]; draggingId: string | null; dropTarget: { col: string; index: number } | null; members: string[]; doneColIds: string[];
   onPointerDown: (e: React.PointerEvent, task: TaskType) => void;
   onCardClick: (task: TaskType) => void;
@@ -833,6 +837,10 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
   colDraggingId: string | null;
   onMoveColTasks?: (colId: string, targetProjectId: string, targetColId: string) => void;
   allProjects?: ProjectType[];
+  onMoveTaskLeft?: (task: TaskType) => void;
+  onMoveTaskRight?: (task: TaskType) => void;
+  canMoveLeft?: boolean;
+  canMoveRight?: boolean;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(col.title);
@@ -924,7 +932,7 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
         {insertIdx === 0 && <DropLine />}
         {displayTasks.map((task, i) => (
           <div key={task.id} ref={(el) => { cardRefs.current[task.id] = el; }}>
-            <TaskCard task={task} dragging={draggingId === task.id} members={members} doneColIds={doneColIds} onPointerDown={onPointerDown} onClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={onComment} onUpdateField={onUpdateField} />
+            <TaskCard task={task} dragging={draggingId === task.id} members={members} doneColIds={doneColIds} onPointerDown={onPointerDown} onClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={onComment} onUpdateField={onUpdateField} onMoveLeft={canMoveLeft ? onMoveTaskLeft : undefined} onMoveRight={canMoveRight ? onMoveTaskRight : undefined} />
             {insertIdx === i + 1 && <DropLine />}
           </div>
         ))}
@@ -1692,16 +1700,27 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
         {canEdit && <button onClick={addCol} style={{ flexShrink: 0, background: "#fff", color: "#6366f1", border: "1.5px solid #6366f1", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif" }}>＋ 列</button>}
       </div>
       <div ref={boardScrollRef} style={{ padding: "18px 14px", display: "flex", gap: 14, overflowX: "auto", alignItems: "flex-start", WebkitOverflowScrolling: "touch", scrollSnapType: "x proximity", scrollBehavior: "smooth", flex: 1, minHeight: 0, paddingBottom: 32 } as React.CSSProperties} className="board-scrollbar">
-        {cols.map((col) => (
-          <ColumnComp key={col.id} col={col} tasks={colTasks(col.id)} draggingId={draggingId} dropTarget={dropTarget} members={members}
-            doneColIds={doneColIds}
-            onPointerDown={onPointerDown} onCardClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={setDetailTask}
-            onUpdateField={onUpdateField} onAddTask={(colId) => setModal({ defaultCol: colId })} onUpdateColTitle={updateColTitle} onDeleteCol={deleteCol}
-            colRef={(el) => { colRefs.current[col.id] = el; }} cardRefs={cardRefs}
-            onColDragStart={onColDragStart} onColDragOver={onColDragOver} onColDrop={onColDrop} colDraggingId={colDraggingId}
-            onMoveColTasks={canEdit ? (colId, targetProjectId, _targetColId) => { moveColTasks.mutate({ colId, targetProjectId }); } : undefined}
-            allProjects={allProjects?.filter(p => p.id !== project.id) || []} />
-        ))}
+        {cols.map((col, colIdx) => {
+          const sortedCols = [...cols].sort((a, b) => a.sortOrder - b.sortOrder);
+          const sortedIdx = sortedCols.findIndex((c) => c.id === col.id);
+          const prevCol = sortedIdx > 0 ? sortedCols[sortedIdx - 1] : null;
+          const nextCol = sortedIdx < sortedCols.length - 1 ? sortedCols[sortedIdx + 1] : null;
+          return (
+            <ColumnComp key={col.id} col={col} tasks={colTasks(col.id)} draggingId={draggingId} dropTarget={dropTarget} members={members}
+              doneColIds={doneColIds}
+              onPointerDown={onPointerDown} onCardClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={setDetailTask}
+              onUpdateField={onUpdateField} onAddTask={(colId) => setModal({ defaultCol: colId })} onUpdateColTitle={updateColTitle} onDeleteCol={deleteCol}
+              colRef={(el) => { colRefs.current[col.id] = el; }} cardRefs={cardRefs}
+              onColDragStart={onColDragStart} onColDragOver={onColDragOver} onColDrop={onColDrop} colDraggingId={colDraggingId}
+              onMoveColTasks={canEdit ? (colId, targetProjectId, _targetColId) => { moveColTasks.mutate({ colId, targetProjectId }); } : undefined}
+              allProjects={allProjects?.filter(p => p.id !== project.id) || []}
+              canMoveLeft={canEdit && !!prevCol}
+              canMoveRight={canEdit && !!nextCol}
+              onMoveTaskLeft={canEdit && prevCol ? (task) => updateTask.mutate({ id: task.id, colId: prevCol.id }) : undefined}
+              onMoveTaskRight={canEdit && nextCol ? (task) => updateTask.mutate({ id: task.id, colId: nextCol.id }) : undefined}
+            />
+          );
+        })}
       </div>
       {/* スクロールインジケーター（ドット）—スマホ向け */}
       {cols.length > 1 && (
