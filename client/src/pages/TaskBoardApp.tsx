@@ -868,70 +868,77 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
       onDragOver={(e) => { e.preventDefault(); onColDragOver(col.id); }}
       onDrop={(e) => { e.preventDefault(); onColDrop(); }}
       style={{ background: isOver ? "#ede9fe" : "#f5f3ff", borderRadius: 16, padding: "13px 11px", minWidth: "min(255px, 78vw)", maxWidth: 275, flex: "0 0 min(255px, 78vw)", display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 108px)", boxShadow: isOver ? "0 0 0 2.5px #6366f1, 0 4px 20px rgba(99,102,241,.14)" : "0 2px 8px rgba(99,102,241,.06)", border: isColDragging ? "2px dashed #6366f1" : isOver ? "2px solid #6366f1" : "1.5px solid rgba(99,102,241,.1)", transition: "background .12s,box-shadow .12s,border-color .12s,opacity .12s", scrollSnapAlign: "start", opacity: isColDragging ? 0.5 : 1 }}>
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 12, gap: 8 }}>
-        <div draggable onDragStart={(e) => { e.stopPropagation(); onColDragStart(col.id); }} title="ドラッグして並び替え" style={{ cursor: "grab", color: "#c7d2fe", fontSize: 14, flexShrink: 0, lineHeight: 1, userSelect: "none", padding: "0 2px" }}>⠿</div>
-        <div style={{ width: 9, height: 9, borderRadius: "50%", background: col.color, flexShrink: 0, boxShadow: `0 0 0 3px ${col.color}28` }} />
-        {editingTitle
-          ? <input autoFocus value={titleVal} onChange={(e) => setTitleVal(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { onUpdateColTitle(col.id, titleVal || col.title); setEditingTitle(false); } }}
-            onBlur={() => { onUpdateColTitle(col.id, titleVal || col.title); setEditingTitle(false); }}
-            style={{ flex: 1, fontWeight: 800, fontSize: 13, color: "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif", border: "1.5px solid #6366f1", borderRadius: 6, padding: "1px 6px", outline: "none" }} />
-          : <span onClick={() => setEditingTitle(true)} title="クリックで編集" style={{ fontWeight: 800, fontSize: 13, color: "#1e1b4b", flex: 1, fontFamily: "'Noto Sans JP',sans-serif", letterSpacing: 0.3, cursor: "text" }}>{col.title}</span>}
-        <span style={{ background: col.color + "22", color: col.color, fontSize: 11, fontWeight: 700, borderRadius: 20, padding: "2px 9px" }}>{tasks.length}</span>
-        {!isDoneCol && (
-          <button
-            onClick={() => setSortByDue((v) => !v)}
-            title={sortByDue ? "期限順（クリックで手動順に切り替え）" : "手動順（クリックで期限順に戻す）"}
-            style={{ background: sortByDue ? "#6366f1" : "none", border: sortByDue ? "none" : "none", cursor: "pointer", color: sortByDue ? "#fff" : "#c7d2fe", fontSize: 13, padding: sortByDue ? "2px 5px" : "0 2px", lineHeight: "1", borderRadius: 6, flexShrink: 0, fontWeight: 700, transition: "background .15s,color .15s" }}
-            onMouseEnter={(e) => { if (!sortByDue) e.currentTarget.style.color = "#6366f1"; }}
-            onMouseLeave={(e) => { if (!sortByDue) e.currentTarget.style.color = "#c7d2fe"; }}>
-            📅
-          </button>
-        )}
-        {onMoveColTasks && allProjects && allProjects.length > 0 && (
-          <div style={{ position: "relative", flexShrink: 0 }}>
+      <div style={{ marginBottom: 8 }}>
+        {/* 1行目：ドラッグ＋ドット＋タイトル＋件数 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+          <div draggable onDragStart={(e) => { e.stopPropagation(); onColDragStart(col.id); }} title="ドラッグして並び替え" style={{ cursor: "grab", color: "#c7d2fe", fontSize: 14, flexShrink: 0, lineHeight: 1, userSelect: "none", padding: "0 2px" }}>⠣</div>
+          <div style={{ width: 9, height: 9, borderRadius: "50%", background: col.color, flexShrink: 0, boxShadow: `0 0 0 3px ${col.color}28` }} />
+          {editingTitle
+            ? <input autoFocus value={titleVal} onChange={(e) => setTitleVal(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { onUpdateColTitle(col.id, titleVal || col.title); setEditingTitle(false); } }}
+              onBlur={() => { onUpdateColTitle(col.id, titleVal || col.title); setEditingTitle(false); }}
+              style={{ flex: 1, fontWeight: 800, fontSize: 13, color: "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif", border: "1.5px solid #6366f1", borderRadius: 6, padding: "1px 6px", outline: "none" }} />
+            : <span onClick={() => setEditingTitle(true)} title="クリックで編集" style={{ fontWeight: 800, fontSize: 13, color: "#1e1b4b", flex: 1, fontFamily: "'Noto Sans JP',sans-serif", letterSpacing: 0.3, cursor: "text", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{col.title}</span>}
+          <span style={{ background: col.color + "22", color: col.color, fontSize: 11, fontWeight: 700, borderRadius: 20, padding: "2px 9px", flexShrink: 0 }}>{tasks.length}</span>
+        </div>
+        {/* 2行目：操作ボタン群 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, paddingLeft: 4 }}>
+          {canMoveLeft && onMoveColLeft && (
+            <button onClick={(e) => { e.stopPropagation(); onMoveColLeft(); }} title="カラムを左へ" style={{ background: "#f0f0ff", border: "1px solid #e0e7ff", cursor: "pointer", color: "#6366f1", fontSize: 13, padding: "2px 8px", lineHeight: "1", borderRadius: 6, flexShrink: 0, fontWeight: 700 }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#f0f0ff")}>←</button>
+          )}
+          {canMoveRight && onMoveColRight && (
+            <button onClick={(e) => { e.stopPropagation(); onMoveColRight(); }} title="カラムを右へ" style={{ background: "#f0f0ff", border: "1px solid #e0e7ff", cursor: "pointer", color: "#6366f1", fontSize: 13, padding: "2px 8px", lineHeight: "1", borderRadius: 6, flexShrink: 0, fontWeight: 700 }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#f0f0ff")}>→</button>
+          )}
+          {!isDoneCol && (
             <button
-              onClick={(e) => { e.stopPropagation(); setShowMoveMenu((v) => !v); }}
-              title={`「${col.title}」カラムごと別プロジェクトへ移動`}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "0 2px", lineHeight: "1" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>
-              📦
+              onClick={() => setSortByDue((v) => !v)}
+              title={sortByDue ? "期限順（クリックで手動順に切り替え）" : "手動順（クリックで期限順に戻す）"}
+              style={{ background: sortByDue ? "#6366f1" : "none", border: sortByDue ? "none" : "none", cursor: "pointer", color: sortByDue ? "#fff" : "#c7d2fe", fontSize: 13, padding: sortByDue ? "2px 5px" : "0 2px", lineHeight: "1", borderRadius: 6, flexShrink: 0, fontWeight: 700, transition: "background .15s,color .15s" }}
+              onMouseEnter={(e) => { if (!sortByDue) e.currentTarget.style.color = "#6366f1"; }}
+              onMouseLeave={(e) => { if (!sortByDue) e.currentTarget.style.color = "#c7d2fe"; }}>
+              📅
             </button>
-            {showMoveMenu && (
-              <div style={{ position: "absolute", top: "100%", right: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e0e7ff", borderRadius: 10, boxShadow: "0 4px 20px rgba(99,102,241,.18)", minWidth: 200, padding: "6px 0" }}
-                onClick={(e) => e.stopPropagation()}>
-                <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, padding: "4px 12px 6px", borderBottom: "1px solid #f0f0ff", fontFamily: "'Noto Sans JP',sans-serif" }}>📦 「{col.title}」をカラムごと移動</div>
-                {allProjects.map((p) => (
-                  <button key={p.id} onClick={() => {
-                    if (window.confirm(`「${col.title}」カラム（${tasks.length}件）を「${p.name}」にカラムごと移動しますか？\n• カラム「${col.title}」は「${p.name}」に移動されます\n• 元のプロジェクトからは削除されます`)) {
-                      onMoveColTasks(col.id, p.id, "");
-                      setShowMoveMenu(false);
-                    }
-                  }}
-                    style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", fontWeight: 600 }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f3ff")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                    <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: p.color, marginRight: 7, verticalAlign: "middle" }} />
-                    {p.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        {canMoveLeft && onMoveColLeft && (
-          <button onClick={(e) => { e.stopPropagation(); onMoveColLeft(); }} title="カラムを左へ" style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 14, padding: "0 1px", lineHeight: "1", flexShrink: 0 }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")} onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>←</button>
-        )}
-        {canMoveRight && onMoveColRight && (
-          <button onClick={(e) => { e.stopPropagation(); onMoveColRight(); }} title="カラムを右へ" style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 14, padding: "0 1px", lineHeight: "1", flexShrink: 0 }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")} onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>→</button>
-        )}
-        {col.title !== "完了" && (
-          <button onClick={() => onDeleteCol(col.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 14, padding: 0, lineHeight: "1" }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
-        )}
+          )}
+          {onMoveColTasks && allProjects && allProjects.length > 0 && (
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowMoveMenu((v) => !v); }}
+                title={`「${col.title}」カラムごと別プロジェクトへ移動`}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#c7d2fe", fontSize: 13, padding: "0 2px", lineHeight: "1" }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "#c7d2fe")}>
+                📦
+              </button>
+              {showMoveMenu && (
+                <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e0e7ff", borderRadius: 10, boxShadow: "0 4px 20px rgba(99,102,241,.18)", minWidth: 200, padding: "6px 0" }}
+                  onClick={(e) => e.stopPropagation()}>
+                  <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, padding: "4px 12px 6px", borderBottom: "1px solid #f0f0ff", fontFamily: "'Noto Sans JP',sans-serif" }}>📦 「{col.title}」をカラムごと移動</div>
+                  {allProjects.map((p) => (
+                    <button key={p.id} onClick={() => {
+                      if (window.confirm(`「${col.title}」カラム（${tasks.length}件）を「${p.name}」にカラムごと移動しますか？\n• カラム「${col.title}」は「${p.name}」に移動されます\n• 元のプロジェクトからは削除されます`)) {
+                        onMoveColTasks(col.id, p.id, "");
+                        setShowMoveMenu(false);
+                      }
+                    }}
+                      style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", fontWeight: 600 }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f3ff")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+                      <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: p.color, marginRight: 7, verticalAlign: "middle" }} />
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <div style={{ flex: 1 }} />
+          {col.title !== "完了" && (
+            <button onClick={() => onDeleteCol(col.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 14, padding: 0, lineHeight: "1" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
+          )}
+        </div>
       </div>
       {sortByDue && !isDoneCol && (
         <div style={{ fontSize: 10, color: "#6366f1", fontWeight: 700, marginBottom: 6, textAlign: "center", background: "#ede9fe", borderRadius: 6, padding: "2px 0" }}>📅 期限日付順</div>
