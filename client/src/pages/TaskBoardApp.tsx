@@ -321,6 +321,12 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
 
   // Load comments from DB
   const commentsQuery = trpc.comment.list.useQuery({ taskId: task.id });
+  // コメントが1件以上あれば自動でコメントタブを開く
+  useEffect(() => {
+    if (commentsQuery.data && commentsQuery.data.length > 0) {
+      setTab("comments");
+    }
+  }, [commentsQuery.data]);
   const deleteComment = trpc.comment.delete.useMutation({ onSuccess: () => commentsQuery.refetch() });
   // Load attachments from DB
   const attachmentsQuery = trpc.attachment.list.useQuery({ taskId: task.id });
