@@ -483,6 +483,8 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
           </div>
         </div>
         {chatMsg && <div style={{ margin: "6px 22px 0", padding: "6px 10px", background: chatMsg.startsWith("✓") ? "#f0fdf4" : "#fef2f2", color: chatMsg.startsWith("✓") ? "#10b981" : "#ef4444", borderRadius: 8, fontSize: 12, fontWeight: 600 }}>{chatMsg}</div>}
+        {/* スクロール可能な上部エリア（タイトル＋フィールド） */}
+        <div style={{ overflowY: "auto", flexShrink: 1, minHeight: 0 }}>
         {/* Title */}
         <input
           defaultValue={task.title}
@@ -546,6 +548,7 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
           </select>
         </div>
         <DescriptionField task={task} onUpdateDescription={onUpdateDescription} />
+        </div>{/* end of scrollable upper area */}
         {/* Tabs */}
         <div style={{ display: "flex", borderBottom: "1.5px solid #f0f0ff", flexShrink: 0 }}>
           {(["subtasks", "comments", "attachments", "dueHistory"] as const).map((t) => (
@@ -555,7 +558,7 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
           ))}
         </div>
         {/* Tab content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "12px 22px 18px" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "12px 22px 18px", minHeight: 180 }}>
           {tab === "subtasks" ? (
             <>
               {(task.subtasks || []).map((s, i) => (
