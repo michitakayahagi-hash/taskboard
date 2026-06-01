@@ -766,6 +766,7 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
       <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: isDone ? "#9ca3af" : overdue ? "#b91c1c" : "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif", lineHeight: 1.4, textDecoration: isDone ? "line-through" : "none" }}>{overdue && <span style={{ marginRight: 4 }}>🚨</span>}{task.title}</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: task.due ? 4 : 8 }}>
         <span style={{ background: p.color + "18", color: p.color, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20 }}>{p.label}</span>
+        {!isDone && <span style={{ background: "#f0fdf4", color: "#059669", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, border: "1px solid #6ee7b7" }}>{task.taskStatus || "未対応"}</span>}
         {(task.tags || []).map((t) => (
           <span key={t} style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20, maxWidth: "100%", overflow: "hidden", display: "inline-flex", alignItems: "center" }}>
             {/^https?:\/\//.test(t)
