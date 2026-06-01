@@ -229,6 +229,7 @@ export const appRouter = router({
         description: z.string().nullable().optional(),
         sortOrder: z.number().default(0),
         createdBy: z.string().optional(),
+        taskStatus: z.string().nullable().optional(),
       }))
       .mutation(async ({ input }) => {
         await db.createTask(input);
@@ -248,6 +249,7 @@ export const appRouter = router({
         sortOrder: z.number().optional(),
         prevCol: z.string().nullable().optional(),
         createdBy: z.string().nullable().optional(),
+        taskStatus: z.string().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;

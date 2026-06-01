@@ -319,6 +319,13 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
   const [chatMsg, setChatMsg] = useState("");
   const currentCol = cols.find((c) => c.id === task.colId);
 
+  // ステータス一覧を取得
+  const statusKey = `project_${projectId}_statuses`;
+  const statusQuery = trpc.setting.get.useQuery({ key: statusKey });
+  const projectStatuses: string[] = (() => {
+    try { return statusQuery.data?.value ? JSON.parse(statusQuery.data.value) : []; } catch { return []; }
+  })();
+
   // Load comments from DB
   const commentsQuery = trpc.comment.list.useQuery({ taskId: task.id });
   // コメントが1件以上あれば自動でコメントタブを開く
@@ -496,16 +503,29 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
         />
         {/* Fields */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "14px 22px 0" }}>
-          {([["優先度", "priority", Object.entries(PRI).map(([k, v]) => [k, v.label])], ["ステータス", "colId", cols.map((c) => [c.id, c.title])], ["期限日", "due", null]] as [string, string, [string, string][] | null][]).map(([label, key, opts]) => (
-            <div key={key}>
-              <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 3 }}>{label}</label>
-              {opts
-                ? <select value={(task as any)[key] || ""} onChange={(e) => onUpdateField(task.id, key, e.target.value)} style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff" }}>
-                  {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          {/* 優先度 */}
+          <div>
+            <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 3 }}>優先度</label>
+            <select value={(task as any)["priority"] || ""} onChange={(e) => onUpdateField(task.id, "priority", e.target.value)} style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff" }}>
+              {Object.entries(PRI).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+          {/* ステータス（カラムとは独立） */}
+          <div>
+            <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 3 }}>ステータス</label>
+            {projectStatuses.length > 0
+              ? <select value={(task as any)["taskStatus"] || ""} onChange={(e) => onUpdateField(task.id, "taskStatus", e.target.value)} style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#f8f7ff" }}>
+                  <option value="">未設定</option>
+                  {projectStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
-                : <CustomDatePicker value={(task as any)[key] || ""} onChange={(v) => onUpdateField(task.id, key, v)} style={{ flex: "none", width: "100%" }} />}
-            </div>
-          ))}
+              : <div style={{ fontSize: 11, color: "#94a3b8", padding: "6px 8px", border: "1.5px dashed #e0e7ff", borderRadius: 8 }}>設定→ステータスで追加</div>
+            }
+          </div>
+          {/* 期限日 */}
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 3 }}>期限日</label>
+            <CustomDatePicker value={(task as any)["due"] || ""} onChange={(v) => onUpdateField(task.id, "due", v)} style={{ flex: "none", width: "100%" }} />
+          </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 3 }}>担当者</label>
             {(() => {
@@ -1097,7 +1117,24 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isP
   const [url, setUrl] = useState(webhookUrl);
   const [localMembers, setLocalMembers] = useState<string[]>(members);
   const [newMember, setNewMember] = useState("");
-  const [activeTab, setActiveTab] = useState<"general" | "access">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "access" | "statuses">("general");
+  // ステータス管理
+  const statusKey = `project_${projectId}_statuses`;
+  const statusQuery = trpc.setting.get.useQuery({ key: statusKey });
+  const setSetting = trpc.setting.set.useMutation({ onSuccess: () => statusQuery.refetch() });
+  const [localStatuses, setLocalStatuses] = useState<string[]>([]);
+  const [newStatus, setNewStatus] = useState("");
+  const [statusSaved, setStatusSaved] = useState(false);
+  useEffect(() => {
+    if (statusQuery.data?.value) {
+      try { setLocalStatuses(JSON.parse(statusQuery.data.value)); } catch { setLocalStatuses([]); }
+    }
+  }, [statusQuery.data?.value]);
+  const saveStatuses = () => {
+    setSetting.mutate({ key: statusKey, value: JSON.stringify(localStatuses) }, {
+      onSuccess: () => { setStatusSaved(true); setTimeout(() => setStatusSaved(false), 2000); }
+    });
+  };
   const [localIsPublic, setLocalIsPublic] = useState<boolean>(isPublic ?? false);
   const updateProject = trpc.project.update.useMutation();
   const [publicSaved, setPublicSaved] = useState(false);
@@ -1116,6 +1153,7 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isP
         {/* Tabs */}
         <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
           <button style={tabStyle(activeTab === "general")} onClick={() => setActiveTab("general")}>一般</button>
+          <button style={tabStyle(activeTab === "statuses")} onClick={() => setActiveTab("statuses")}>🏷 ステータス</button>
           <button style={tabStyle(activeTab === "access")} onClick={() => setActiveTab("access")}>🔒 アクセス権限</button>
         </div>
 
@@ -1145,6 +1183,36 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isP
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
               <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
               <button onClick={() => onSave(url, localMembers)} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: "0 4px 12px rgba(99,102,241,.35)" }}>保存</button>
+            </div>
+          </>
+        )}
+
+        {activeTab === "statuses" && (
+          <>
+            <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 12px" }}>タスクのステータス項目を自由に追加・削除・編集できます。カラムとは独立して動作します。</p>
+            <div style={{ marginBottom: 8 }}>
+              {localStatuses.map((s, i) => (
+                <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                  <input value={s} onChange={(e) => { const ns = [...localStatuses]; ns[i] = e.target.value; setLocalStatuses(ns); }}
+                    style={{ flex: 1, border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
+                  <button onClick={() => setLocalStatuses(localStatuses.filter((_, j) => j !== i))}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 16 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#e0e7ff")}>×</button>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                <input value={newStatus} onChange={(e) => setNewStatus(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && newStatus.trim()) { setLocalStatuses([...localStatuses, newStatus.trim()]); setNewStatus(""); } }}
+                  placeholder="新しいステータス名"
+                  style={{ flex: 1, border: "1.5px dashed #c7d2fe", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
+                <button onClick={() => { if (newStatus.trim()) { setLocalStatuses([...localStatuses, newStatus.trim()]); setNewStatus(""); } }}
+                  style={{ background: "#ede9fe", color: "#6366f1", border: "none", borderRadius: 8, padding: "0 12px", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>追加</button>
+              </div>
+            </div>
+            {statusSaved && <div style={{ fontSize: 11, color: "#10b981", fontWeight: 700, marginBottom: 8 }}>✓ 保存しました</div>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+              <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
+              <button onClick={saveStatuses} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: "0 4px 12px rgba(99,102,241,.35)" }}>保存</button>
             </div>
           </>
         )}
