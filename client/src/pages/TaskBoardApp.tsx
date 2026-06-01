@@ -76,7 +76,7 @@ function reorder(tasks: TaskType[], dragId: string, targetCol: string, targetInd
 }
 
 // ─── CustomDatePicker ────────────────────────────────────────────────────────
-function CustomDatePicker({ value, onChange, style }: { value: string; onChange: (v: string) => void; style?: React.CSSProperties }) {
+function CustomDatePicker({ value, onChange, style, placeholder }: { value: string; onChange: (v: string) => void; style?: React.CSSProperties; placeholder?: string }) {
   const [open, setOpen] = useState(false);
   const [calPos, setCalPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [viewYear, setViewYear] = useState(() => {
@@ -156,7 +156,7 @@ function CustomDatePicker({ value, onChange, style }: { value: string; onChange:
         onPointerDown={(e) => e.stopPropagation()}
         style={{ width: "100%", border: "1.5px solid #e0e7ff", borderRadius: 7, padding: "3px 6px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: value ? "#1e1b4b" : "#94a3b8", background: "#f8f7ff", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 4, overflow: "hidden", minWidth: 0 }}>
         <span style={{ flexShrink: 0 }}>📅</span>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{displayVal || "年/月/日"}</span>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{displayVal || placeholder || "年/月/日"}</span>
       </button>
       {open && (
         <div data-datepicker-popup onPointerDown={(e) => e.stopPropagation()} style={{ position: "fixed", zIndex: 99999, top: calPos.top, left: calPos.left, right: Math.max(8, window.innerWidth - calPos.left - Math.min(280, window.innerWidth - 16)), background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(99,102,241,.28)", border: "1.5px solid #e0e7ff", padding: "10px 12px", minWidth: 0, width: Math.min(280, (Math.min(document.documentElement.clientWidth, window.innerWidth)) - 16) }}>
@@ -521,10 +521,14 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
               : <div style={{ fontSize: 11, color: "#94a3b8", padding: "6px 8px", border: "1.5px dashed #e0e7ff", borderRadius: 8 }}>設定→ステータスで追加</div>
             }
           </div>
-          {/* 期限日 */}
+          {/* 期限日（開始〜終了） */}
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 3 }}>期限日</label>
-            <CustomDatePicker value={(task as any)["due"] || ""} onChange={(v) => onUpdateField(task.id, "due", v)} style={{ flex: "none", width: "100%" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <CustomDatePicker value={(task as any)["dueStart"] || ""} onChange={(v) => onUpdateField(task.id, "dueStart", v)} style={{ flex: 1 }} placeholder="開始日" />
+              <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 13 }}>～</span>
+              <CustomDatePicker value={(task as any)["due"] || ""} onChange={(v) => onUpdateField(task.id, "due", v)} style={{ flex: 1 }} placeholder="終了日" />
+            </div>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 3 }}>担当者</label>
@@ -780,18 +784,21 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
         ))}
         <InlineTagInput onAdd={(tag) => { if (tag && !(task.tags || []).includes(tag)) onUpdateField(task.id, "tags", [...(task.tags || []), tag]); }} />
       </div>
-      {task.due && (() => {
+      {(task.due || (task as any).dueStart) && (() => {
         const todayStr = new Date().toISOString().slice(0, 10);
-        const dueStr = task.due.replace(/\//g, "-");
+        const dueStr = (task.due || "").replace(/\//g, "-");
         const isToday = dueStr === todayStr && !isDone;
+        const dueStartStr = ((task as any).dueStart || "").replace(/\//g, "-");
+        const isSameDay = dueStartStr && dueStr && dueStartStr === dueStr;
+        const displayDue = dueStartStr && !isSameDay ? `${(task as any).dueStart} 〜 ${task.due}` : task.due || "";
         return (
           <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{
-              fontSize: 13, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
+              fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
               background: isDone ? "#f3f4f6" : overdue ? "#ef4444" : isToday ? "#f59e0b" : "#f1f5f9",
               color: isDone ? "#9ca3af" : overdue ? "#fff" : isToday ? "#fff" : "#475569",
               letterSpacing: 0.3,
-            }}>📅 {task.due}</span>
+            }}>📅 {displayDue}</span>
             {overdue && !isDone && <span style={{ fontSize: 11, fontWeight: 700, color: "#ef4444" }}>期限超過</span>}
             {isToday && <span style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b" }}>今日まで</span>}
           </div>
@@ -837,7 +844,10 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
             </div>
           );
         })()}
-        <CustomDatePicker value={task.due || ""} onChange={(v) => onUpdateField(task.id, "due", v)} style={{ minWidth: 0, flex: "1 1 0", overflow: "hidden" }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0, flex: "1 1 0" }}>
+          <CustomDatePicker value={(task as any).dueStart || ""} onChange={(v) => onUpdateField(task.id, "dueStart", v)} style={{ minWidth: 0, width: "100%" }} placeholder="開始日" />
+          <CustomDatePicker value={task.due || ""} onChange={(v) => onUpdateField(task.id, "due", v)} style={{ minWidth: 0, width: "100%" }} placeholder="終了日" />
+        </div>
       </div>
       <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", alignItems: "center", flexWrap: "nowrap", overflow: "hidden" }}>
         {onMoveLeft && <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onMoveLeft(task); }} title="左のカラムへ移動" style={{ fontSize: 13, fontWeight: 700, color: "#6366f1", background: "#ede9fe", border: "1.5px solid #c4b5fd", borderRadius: 8, padding: "3px 7px", cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>←</button>}
@@ -997,8 +1007,8 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
 }
 
 // ─── AddTaskModal ─────────────────────────────────────────────────────────────
-function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave }: { defaultCol: string; cols: Col[]; members: string[]; currentUser?: string; onClose: () => void; onSave: (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[]; createdBy?: string; description?: string }) => void }) {
-  const [form, setForm] = useState({ title: "", colId: defaultCol || cols[0]?.id || "", assignee: "", priority: "medium", due: "", tags: [] as string[], description: "" });
+function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave }: { defaultCol: string; cols: Col[]; members: string[]; currentUser?: string; onClose: () => void; onSave: (form: { title: string; colId: string; assignee: string; priority: string; due: string; dueStart?: string; tags: string[]; createdBy?: string; description?: string }) => void }) {
+  const [form, setForm] = useState({ title: "", colId: defaultCol || cols[0]?.id || "", assignee: "", priority: "medium", due: "", dueStart: "", tags: [] as string[], description: "" });
   const [assignee2, setAssignee2] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [createdBySelected, setCreatedBySelected] = useState(currentUser || "");
@@ -1015,16 +1025,22 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
           style={{ width: "100%", border: "2px solid #e0e7ff", borderRadius: 10, padding: "9px 11px", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 14, fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }}
           onFocus={(e) => (e.target.style.borderColor = "#6366f1")} onBlur={(e) => (e.target.style.borderColor = "#e0e7ff")} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-          {([["優先度", "priority", Object.entries(PRI).map(([k, v]) => [k, v.label])], ["ステータス", "colId", cols.map((c) => [c.id, c.title])], ["期限日", "due", null]] as [string, string, [string, string][] | null][]).map(([label, key, opts]) => (
+          {([["優先度", "priority", Object.entries(PRI).map(([k, v]) => [k, v.label])], ["ステータス", "colId", cols.map((c) => [c.id, c.title])]] as [string, string, [string, string][] | null][]).map(([label, key, opts]) => (
             <div key={key}>
               <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>{label}</label>
-              {opts
-                ? <select value={(form as any)[key] || ""} onChange={(e) => set(key, e.target.value)} style={{ width: "100%", border: "2px solid #e0e7ff", borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#fff" }}>
-                  {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-                : <CustomDatePicker value={(form as any)[key] || ""} onChange={(v) => set(key, v)} style={{ flex: "none", width: "100%" }} />}
+              <select value={(form as any)[key] || ""} onChange={(e) => set(key, e.target.value)} style={{ width: "100%", border: "2px solid #e0e7ff", borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#fff" }}>
+                {(opts || []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
             </div>
           ))}
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>期限日</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <CustomDatePicker value={form.dueStart || ""} onChange={(v) => set("dueStart", v)} style={{ flex: 1 }} placeholder="開始日" />
+              <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 13 }}>～</span>
+              <CustomDatePicker value={form.due || ""} onChange={(v) => set("due", v)} style={{ flex: 1 }} placeholder="終了日" />
+            </div>
+          </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>担当者</label>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -1655,11 +1671,11 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
 
   const onCardClick = useCallback((task: TaskType) => { if (!dragRef.current.moved) setDetailTask(task); dragRef.current.moved = false; }, []);
 
-  const saveTask = (form: { title: string; colId: string; assignee: string; priority: string; due: string; tags: string[]; createdBy?: string; description?: string }) => {
+  const saveTask = (form: { title: string; colId: string; assignee: string; priority: string; due: string; dueStart?: string; tags: string[]; createdBy?: string; description?: string }) => {
     // 新規タスクをsortOrder=0で作成し、既存タスクを全て+1ずらして先頭に表示
     const colList = tasks.filter((t) => t.colId === form.colId);
     colList.forEach((t) => { updateTask.mutate({ id: t.id, sortOrder: t.sortOrder + 1 }); });
-    createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, tags: form.tags, sortOrder: 0, createdBy: form.createdBy || undefined, description: form.description || undefined });
+    createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, dueStart: form.dueStart || null, tags: form.tags, sortOrder: 0, createdBy: form.createdBy || undefined, description: form.description || undefined });
     // Google Chat通知
     if (webhookUrl && form.assignee) {
       const colName = cols.find((c) => c.id === form.colId)?.title || "";

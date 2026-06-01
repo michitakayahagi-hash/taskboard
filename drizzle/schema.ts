@@ -60,6 +60,7 @@ export const tasks = mysqlTable("tasks", {
   assignee: varchar("assignee", { length: 100 }).notNull().default(""),
   priority: varchar("priority", { length: 20 }).notNull().default("medium"),
   due: varchar("due", { length: 20 }),
+  dueStart: varchar("dueStart", { length: 20 }),
   tags: json("tags").$type<string[]>().notNull().default([]),
   subtasks: json("subtasks").$type<{ id: number; text: string; done: boolean; assignee?: string; url?: string }[]>().notNull().default([]),
   description: text("description"),
