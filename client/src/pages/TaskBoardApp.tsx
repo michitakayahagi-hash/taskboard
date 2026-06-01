@@ -766,7 +766,11 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
       <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: isDone ? "#9ca3af" : overdue ? "#b91c1c" : "#1e1b4b", fontFamily: "'Noto Sans JP',sans-serif", lineHeight: 1.4, textDecoration: isDone ? "line-through" : "none" }}>{overdue && <span style={{ marginRight: 4 }}>🚨</span>}{task.title}</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: task.due ? 4 : 8 }}>
         <span style={{ background: p.color + "18", color: p.color, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20 }}>{p.label}</span>
-        {!isDone && <span style={{ background: "#f0fdf4", color: "#059669", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, border: "1px solid #6ee7b7" }}>{task.taskStatus || "未対応"}</span>}
+        {!isDone && (() => {
+          const st = task.taskStatus || "未対応";
+          const stColor = st === "対応中" ? { bg: "#eff6ff", color: "#1d4ed8", border: "#93c5fd" } : st === "未対応" ? { bg: "#fef2f2", color: "#dc2626", border: "#fca5a5" } : { bg: "#f0fdf4", color: "#059669", border: "#6ee7b7" };
+          return <span style={{ background: stColor.bg, color: stColor.color, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, border: `1px solid ${stColor.border}` }}>{st}</span>;
+        })()}
         {(task.tags || []).map((t) => (
           <span key={t} style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20, maxWidth: "100%", overflow: "hidden", display: "inline-flex", alignItems: "center" }}>
             {/^https?:\/\//.test(t)
