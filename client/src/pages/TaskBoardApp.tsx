@@ -604,7 +604,7 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
                     ) : (
                       <span onClick={() => { setEditingSubId(s.id); setEditingSubText(s.text); }}
                         title="クリックで編集"
-                        style={{ fontSize: 13, color: s.done ? "#94a3b8" : "#1e1b4b", textDecoration: s.done ? "line-through" : "none", flex: 1, cursor: "text", minWidth: 0, wordBreak: "break-all" }}>
+                        style={{ fontSize: 13, color: s.done ? "#94a3b8" : (s.due && s.due < new Date().toISOString().slice(0, 10) ? "#ef4444" : "#1e1b4b"), textDecoration: s.done ? "line-through" : "none", flex: 1, cursor: "text", minWidth: 0, wordBreak: "break-all" }}>
                         {s.url ? (
                           <a href={s.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: s.done ? "#94a3b8" : "#6366f1", textDecoration: "underline", wordBreak: "break-all" }}>{s.text}</a>
                         ) : s.text}
