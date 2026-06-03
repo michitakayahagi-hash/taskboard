@@ -650,10 +650,13 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
                     <CustomDatePicker value={s.due || ""} onChange={(v) => { const ns = [...task.subtasks]; ns[i] = { ...s, due: v || undefined }; onUpdateSubtasks(task.id, ns); }} />
                     {s.due && (() => {
                       const today = new Date().toISOString().slice(0, 10);
+                      const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();
                       const isOverdue = s.due < today && !s.done;
                       const isToday = s.due === today && !s.done;
+                      const isTomorrow = s.due === tomorrow && !s.done;
                       return isOverdue ? <span style={{ fontSize: 10, color: "#ef4444", fontWeight: 700 }}>期限超過</span>
-                        : isToday ? <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>今日まで</span> : null;
+                        : isToday ? <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>今日まで</span>
+                        : isTomorrow ? <span style={{ fontSize: 10, color: "#eab308", fontWeight: 700 }}>明日まで</span> : null;
                     })()}
                   </div>
                 </div>
@@ -799,8 +802,10 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
       </div>
       {(task.due || (task as any).dueStart) && (() => {
         const todayStr = new Date().toISOString().slice(0, 10);
+        const tomorrowStr = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();
         const dueStr = (task.due || "").replace(/\//g, "-");
         const isToday = dueStr === todayStr && !isDone;
+        const isTomorrow = dueStr === tomorrowStr && !isDone;
         const dueStartStr = ((task as any).dueStart || "").replace(/\//g, "-");
         const isSameDay = dueStartStr && dueStr && dueStartStr === dueStr;
         // 月/日の短縮表示（例: 6/1 〜 6/15）
@@ -810,12 +815,13 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
           <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{
               fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
-              background: isDone ? "#f3f4f6" : overdue ? "#ef4444" : isToday ? "#f59e0b" : "#f1f5f9",
-              color: isDone ? "#9ca3af" : overdue ? "#fff" : isToday ? "#fff" : "#475569",
+              background: isDone ? "#f3f4f6" : overdue ? "#ef4444" : isToday ? "#f59e0b" : isTomorrow ? "#eab308" : "#f1f5f9",
+              color: isDone ? "#9ca3af" : overdue ? "#fff" : isToday ? "#fff" : isTomorrow ? "#fff" : "#475569",
               letterSpacing: 0.3,
             }}>📅 {displayDue}</span>
             {overdue && !isDone && <span style={{ fontSize: 11, fontWeight: 700, color: "#ef4444" }}>期限超過</span>}
             {isToday && <span style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b" }}>今日まで</span>}
+            {isTomorrow && <span style={{ fontSize: 11, fontWeight: 700, color: "#eab308" }}>明日まで</span>}
           </div>
         );
       })()}
