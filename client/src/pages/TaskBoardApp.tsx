@@ -61,7 +61,7 @@ interface TaskType {
   id: string; colId: string; sortOrder: number; title: string; assignee: string;
   priority: string; due: string | null; tags: string[]; subtasks: Subtask[];
   description: string | null; prevCol?: string | null; projectId: string;
-  createdBy?: string | null;
+  createdBy?: string | null; createdAt?: string | Date | null;
 }
 interface ProjectType { id: string; name: string; color: string; }
 
@@ -790,7 +790,9 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
         const isToday = dueStr === todayStr && !isDone;
         const dueStartStr = ((task as any).dueStart || "").replace(/\//g, "-");
         const isSameDay = dueStartStr && dueStr && dueStartStr === dueStr;
-        const displayDue = dueStartStr && !isSameDay ? `${(task as any).dueStart} 〜 ${task.due}` : task.due || "";
+        // 月/日の短縮表示（例: 6/1 〜 6/15）
+        const fmtDate = (d: string) => { if (!d) return ""; const parts = d.replace(/\//g, "-").split("-"); return parts.length >= 3 ? `${parseInt(parts[1])}/${parseInt(parts[2])}` : d; };
+        const displayDue = dueStartStr && !isSameDay ? `${fmtDate((task as any).dueStart)} 〜 ${fmtDate(task.due || "")}` : fmtDate(task.due || "");
         return (
           <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{
@@ -849,6 +851,11 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
           <CustomDatePicker value={task.due || ""} onChange={(v) => onUpdateField(task.id, "due", v)} style={{ minWidth: 0, width: "100%" }} placeholder="終了日" />
         </div>
       </div>
+      {task.createdAt && (
+        <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 6, textAlign: "right" }}>
+          作成: {(() => { const d = new Date(task.createdAt as string); return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`; })()}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", alignItems: "center", flexWrap: "nowrap", overflow: "hidden" }}>
         {onMoveLeft && <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onMoveLeft(task); }} title="左のカラムへ移動" style={{ fontSize: 13, fontWeight: 700, color: "#6366f1", background: "#ede9fe", border: "1.5px solid #c4b5fd", borderRadius: 8, padding: "3px 7px", cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>←</button>}
         {onMoveRight && <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onMoveRight(task); }} title="右のカラムへ移動" style={{ fontSize: 13, fontWeight: 700, color: "#6366f1", background: "#ede9fe", border: "1.5px solid #c4b5fd", borderRadius: 8, padding: "3px 7px", cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>→</button>}
