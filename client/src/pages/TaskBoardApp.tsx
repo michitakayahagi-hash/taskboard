@@ -290,7 +290,7 @@ function DescriptionField({ task, onUpdateDescription }: { task: TaskType; onUpd
 }
 
 // ─── TaskDetailModal ────────────────────────────────────────────────────────────
-function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, onAddComment, onUpdateSubtasks, onUpdateDescription, onUpdateField, onDeleteTask, onMoveTask, allProjects }: {
+function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, onAddComment, onUpdateSubtasks, onUpdateDescription, onUpdateField, onDeleteTask, onMoveTask, allProjects, onComplete, onRevert, doneColIds }: {
   task: TaskType; cols: Col[]; webhookUrl: string; members: string[]; projectId: string;
   onClose: () => void;
   onAddComment: (taskId: string, comment: CommentType) => void;
@@ -300,6 +300,9 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
   onDeleteTask?: (taskId: string) => void;
   onMoveTask?: (taskId: string, targetProjectId: string, targetColId: string) => void;
   allProjects?: ProjectType[];
+  onComplete?: (task: TaskType) => void;
+  onRevert?: (task: TaskType) => void;
+  doneColIds?: string[];
 }) {
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const [moveStep, setMoveStep] = useState<"project" | "col">("project");
@@ -412,6 +415,16 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
             <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{currentCol?.title || ""}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {(() => {
+              const isDone = (doneColIds || []).includes(task.colId);
+              if (isDone && onRevert) return (
+                <button onClick={() => { onRevert(task); onClose(); }} style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", background: "#f1f5f9", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap" }}>↩ 戻す</button>
+              );
+              if (!isDone && onComplete) return (
+                <button onClick={() => { onComplete(task); onClose(); }} style={{ fontSize: 12, fontWeight: 700, color: "#10b981", background: "#f0fdf4", border: "1.5px solid #6ee7b7", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap" }}>✓ 完了</button>
+              );
+              return null;
+            })()}
             <button onClick={copyShareLink} title="共有リンクをコピー" style={{ background: "#ede9fe", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 14, color: "#6366f1" }}>🔗</button>
             {onMoveTask && allProjects && allProjects.length > 0 && (
               <div style={{ position: "relative" }}>
@@ -1886,7 +1899,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
         </div>
       )}
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} currentUser={projectSession?.name || members[0] || ""} onClose={() => setModal(null)} onSave={saveTask} />}
-      {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} onMoveTask={canEdit ? (id, targetProjectId, targetColId) => { moveTask.mutate({ id, targetProjectId, targetColId }); setDetailTask(null); } : undefined} allProjects={allProjects?.filter(p => p.id !== project.id) || []} />}
+      {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} onMoveTask={canEdit ? (id, targetProjectId, targetColId) => { moveTask.mutate({ id, targetProjectId, targetColId }); setDetailTask(null); } : undefined} allProjects={allProjects?.filter(p => p.id !== project.id) || []} onComplete={onComplete} onRevert={onRevert} doneColIds={doneColIds} />}
       {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isPublic={(project as any).isPublic ?? false} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </div>
