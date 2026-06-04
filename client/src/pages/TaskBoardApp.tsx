@@ -1838,8 +1838,8 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
             btn.style.transform = "rotate(360deg)";
             btn.style.transition = "transform 0.5s ease";
             setTimeout(() => { btn.style.transform = ""; btn.style.transition = "background .15s"; }, 600);
-            await utils.column.list.invalidate({ projectId: project.id });
-            await utils.task.list.invalidate({ projectId: project.id });
+            await utils.column.list.refetch({ projectId: project.id });
+            await utils.task.list.refetch({ projectId: project.id });
           }} title="更新" style={{ flexShrink: 0, background: "#f8f7ff", color: "#6366f1", border: "1.5px solid #e0e7ff", borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer", transition: "background .15s" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#f8f7ff")}>🔄</button>
         <button onClick={() => setShowHelp(true)} title="使い方" style={{ flexShrink: 0, background: "#f8f7ff", color: "#6366f1", border: "1.5px solid #e0e7ff", borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer", fontWeight: 800 }}

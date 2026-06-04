@@ -43,16 +43,27 @@ async function runMigrations() {
       INDEX idx_task_id (task_id)
     )`);
     console.log("[DB] attachments table ensured");
-    // fileUrlカラムをMEDIUMTEXTに変更（キャメルケース・スネークケース両方対応）
-    try {
-      await conn.execute(`ALTER TABLE attachments MODIFY COLUMN fileUrl MEDIUMTEXT NOT NULL`);
-      console.log("[DB] attachments.fileUrl changed to MEDIUMTEXT");
-    } catch (_) {
+    // スネークケースカラムをキャメルケースにリネーム（Drizzleスキーマと一致させる）
+    const renames = [
+      ["task_id", "taskId", "VARCHAR(255) NOT NULL"],
+      ["file_name", "fileName", "VARCHAR(500) NOT NULL"],
+      ["file_url", "fileUrl", "MEDIUMTEXT NOT NULL"],
+      ["file_size", "fileSize", "INT NOT NULL DEFAULT 0"],
+      ["mime_type", "mimeType", "VARCHAR(255) NOT NULL DEFAULT 'application/octet-stream'"],
+      ["uploaded_by", "uploadedBy", "VARCHAR(255) NOT NULL DEFAULT 'unknown'"],
+      ["created_at", "createdAt", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"],
+    ];
+    for (const [oldName, newName, colDef] of renames) {
       try {
-        await conn.execute(`ALTER TABLE attachments MODIFY COLUMN file_url MEDIUMTEXT NOT NULL`);
-        console.log("[DB] attachments.file_url changed to MEDIUMTEXT");
-      } catch (_2) { /* already MEDIUMTEXT or column not found */ }
+        await conn.execute(`ALTER TABLE attachments CHANGE COLUMN \`${oldName}\` \`${newName}\` ${colDef}`);
+        console.log(`[DB] attachments: renamed ${oldName} -> ${newName}`);
+      } catch (_) { /* already renamed or column not found */ }
     }
+    // fileUrlカラムをMEDIUMTEXTに変更（既にキャメルケースの場合）
+    try {
+      await conn.execute(`ALTER TABLE attachments MODIFY COLUMN \`fileUrl\` MEDIUMTEXT NOT NULL`);
+      console.log("[DB] attachments.fileUrl changed to MEDIUMTEXT");
+    } catch (_) { /* ignore */ }
     await conn.end();
   } catch (err) {
     console.error("[DB] attachments table error:", err);
