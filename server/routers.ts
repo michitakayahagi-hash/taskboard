@@ -864,9 +864,15 @@ export const appRouter = router({
           fileUrl = result.url;
         } catch (e) {
           // ストレージが利用不可な場合はフォールバック：Base64 URLを直接保存
+          console.log("[Storage] fallback to base64, reason:", (e as Error).message);
           fileUrl = `data:${mimeType};base64,${base64Data}`;
         }
-        await db.createAttachment({ taskId, fileName, fileUrl, fileSize, uploadedBy });
+        try {
+          await db.createAttachment({ taskId, fileName, fileUrl, fileSize, uploadedBy });
+        } catch (dbErr) {
+          console.error("[Attachment] DB insert error:", (dbErr as Error).message);
+          throw dbErr;
+        }
         return { success: true, fileUrl };
       }),
     // 添付ファイル削除
