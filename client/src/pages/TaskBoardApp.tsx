@@ -351,9 +351,9 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) { setChatMsg("✗ ファイルサイズは10MB以下にしてください"); setTimeout(() => setChatMsg(""), 3000); return; }
     setUploading(true);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
         const base64 = ev.target?.result as string;
         await uploadAttachment.mutateAsync({
           taskId: task.id,
@@ -365,11 +365,20 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
         });
         setChatMsg("✓ ファイルをアップロードしました");
         setTimeout(() => setChatMsg(""), 2000);
+      } catch {
+        setChatMsg("✗ アップロードに失敗しました");
+        setTimeout(() => setChatMsg(""), 3000);
+      } finally {
         setUploading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch { setChatMsg("✗ アップロードに失敗しました"); setTimeout(() => setChatMsg(""), 3000); setUploading(false); }
-    if (fileInputRef.current) fileInputRef.current.value = "";
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    };
+    reader.onerror = () => {
+      setChatMsg("✗ ファイルの読み込みに失敗しました");
+      setTimeout(() => setChatMsg(""), 3000);
+      setUploading(false);
+    };
+    reader.readAsDataURL(file);
   };
   const dbComments = commentsQuery.data || [];
 

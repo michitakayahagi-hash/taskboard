@@ -1,0 +1,1 @@
+ALTER TABLE `attachments` MODIFY COLUMN `fileUrl` MEDIUMTEXT NOT NULL;
