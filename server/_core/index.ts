@@ -43,6 +43,16 @@ async function runMigrations() {
       INDEX idx_task_id (task_id)
     )`);
     console.log("[DB] attachments table ensured");
+    // fileUrlカラムをMEDIUMTEXTに変更（キャメルケース・スネークケース両方対応）
+    try {
+      await conn.execute(`ALTER TABLE attachments MODIFY COLUMN fileUrl MEDIUMTEXT NOT NULL`);
+      console.log("[DB] attachments.fileUrl changed to MEDIUMTEXT");
+    } catch (_) {
+      try {
+        await conn.execute(`ALTER TABLE attachments MODIFY COLUMN file_url MEDIUMTEXT NOT NULL`);
+        console.log("[DB] attachments.file_url changed to MEDIUMTEXT");
+      } catch (_2) { /* already MEDIUMTEXT or column not found */ }
+    }
     await conn.end();
   } catch (err) {
     console.error("[DB] attachments table error:", err);
