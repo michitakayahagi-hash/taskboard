@@ -1223,7 +1223,13 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isP
             <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 8 }}>メンバー管理</label>
             <div style={{ marginBottom: 4 }}>
               {localMembers.map((m, i) => (
-                <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                <div key={i} style={{ display: "flex", gap: 4, marginBottom: 6, alignItems: "center" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    <button onClick={() => { if (i === 0) return; const nm = [...localMembers]; [nm[i-1], nm[i]] = [nm[i], nm[i-1]]; setLocalMembers(nm); }}
+                      style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", color: i === 0 ? "#e0e7ff" : "#6366f1", fontSize: 10, padding: "0 2px", lineHeight: 1 }}>▲</button>
+                    <button onClick={() => { if (i === localMembers.length - 1) return; const nm = [...localMembers]; [nm[i], nm[i+1]] = [nm[i+1], nm[i]]; setLocalMembers(nm); }}
+                      style={{ background: "none", border: "none", cursor: i === localMembers.length - 1 ? "default" : "pointer", color: i === localMembers.length - 1 ? "#e0e7ff" : "#6366f1", fontSize: 10, padding: "0 2px", lineHeight: 1 }}>▼</button>
+                  </div>
                   <input value={m} onChange={(e) => { const nm = [...localMembers]; nm[i] = e.target.value; setLocalMembers(nm); }}
                     style={{ flex: 1, border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b" }} />
                   <button onClick={() => { setLocalMembers(localMembers.filter((_, j) => j !== i)); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e0e7ff", fontSize: 16 }}
