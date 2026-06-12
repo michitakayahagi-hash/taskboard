@@ -9,7 +9,7 @@ export const ANNOUNCEMENTS: { id: string; date: string; title: string; body: str
   {
     id: "2026-06-12-move-col",
     date: "2026/06/12",
-    title: "📦 タスク詳細から同プロジェクト内のカラムへ移動できるようになりました",
+    title: "📦 同プロジェクト内のカラムへ移動できるようになりました",
     body: "タスク詳細モーダルの📦ボタンから、同じプロジェクト内の別カラムにタスクを移動できます。別プロジェクトへの移動も引き続き利用できます。",
   },
   {
@@ -22,13 +22,13 @@ export const ANNOUNCEMENTS: { id: string; date: string; title: string; body: str
     id: "2026-06-11-tomorrow-badge",
     date: "2026/06/11",
     title: "🟡 「明日まで」の期限バッジを追加しました",
-    body: "期限が明日のタスク・小タスクに黄色の「明日まで」バッジが表示されるようになりました。今日まで（オレンジ）・期限超過（赤）と合わせてご活用ください。",
+    body: "期限が明日のタスク・小タスクに黄色の「明日まで」バッジが表示されるようになりました。",
   },
   {
     id: "2026-06-10-complete-btn",
     date: "2026/06/10",
     title: "✅ タスク詳細モーダルに完了ボタンを追加しました",
-    body: "タスク詳細画面の右上に「✓ 完了」ボタンが追加されました。完了済みのタスクは「↩ 戻す」ボタンで元のカラムに戻せます。",
+    body: "タスク詳細画面の右上に「✓ 完了」ボタンが追加されました。完了済みは「↩ 戻す」で元に戻せます。",
   },
   {
     id: "2026-06-09-overdue-red",
@@ -38,7 +38,7 @@ export const ANNOUNCEMENTS: { id: string; date: string; title: string; body: str
   },
 ];
 
-const STORAGE_KEY = "taskboard_read_announcements";
+const STORAGE_KEY = "taskboard_read_announcements_v2";
 
 function getReadIds(): string[] {
   try {
@@ -71,61 +71,72 @@ export default function AnnouncementBell() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // ポップアップを開いたとき既読にする（閉じるときではなく開いた後に遅延で既読）
+  useEffect(() => {
+    if (!open) return;
+    const timer = setTimeout(() => {
+      const allIds = ANNOUNCEMENTS.map((a) => a.id);
+      setReadIds(allIds);
+      saveReadIds(allIds);
+    }, 1500); // 1.5秒後に既読
+    return () => clearTimeout(timer);
+  }, [open]);
+
   const markAllRead = () => {
     const allIds = ANNOUNCEMENTS.map((a) => a.id);
     setReadIds(allIds);
     saveReadIds(allIds);
   };
 
-  const handleOpen = () => {
-    setOpen((v) => !v);
-    // 開いたら全既読にする
-    if (!open) {
-      const allIds = ANNOUNCEMENTS.map((a) => a.id);
-      setReadIds(allIds);
-      saveReadIds(allIds);
-    }
-  };
-
   return (
     <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
-      {/* ベルボタン */}
+      {/* ベルボタン - 未読時は目立つデザイン */}
       <button
-        onClick={handleOpen}
+        onClick={() => setOpen((v) => !v)}
         title="新機能のお知らせ"
         style={{
           position: "relative",
-          background: open ? "#ede9fe" : "#f8f7ff",
-          color: "#6366f1",
-          border: "1.5px solid #e0e7ff",
+          background: unreadCount > 0
+            ? "linear-gradient(135deg, #6366f1, #8b5cf6)"
+            : open ? "#ede9fe" : "#f8f7ff",
+          color: unreadCount > 0 ? "#fff" : "#6366f1",
+          border: unreadCount > 0 ? "none" : "1.5px solid #e0e7ff",
           borderRadius: 10,
-          padding: "7px 11px",
+          padding: "7px 13px",
           fontSize: 15,
           cursor: "pointer",
-          transition: "background .15s",
+          transition: "all .2s",
+          boxShadow: unreadCount > 0 ? "0 4px 14px rgba(99,102,241,.45)" : "none",
+          fontWeight: unreadCount > 0 ? 700 : 400,
+          animation: unreadCount > 0 ? "bellShake 1.2s ease infinite" : "none",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = open ? "#ede9fe" : "#f8f7ff")}
+        onMouseEnter={(e) => {
+          if (unreadCount === 0) e.currentTarget.style.background = "#ede9fe";
+        }}
+        onMouseLeave={(e) => {
+          if (unreadCount === 0) e.currentTarget.style.background = open ? "#ede9fe" : "#f8f7ff";
+        }}
       >
         🔔
         {unreadCount > 0 && (
           <span style={{
             position: "absolute",
-            top: -4,
-            right: -4,
+            top: -5,
+            right: -5,
             background: "#ef4444",
             color: "#fff",
             fontSize: 9,
             fontWeight: 800,
             borderRadius: "50%",
-            width: 16,
-            height: 16,
+            minWidth: 17,
+            height: 17,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             border: "2px solid #fff",
             lineHeight: 1,
             fontFamily: "'Noto Sans JP',sans-serif",
+            padding: "0 2px",
           }}>
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
@@ -136,16 +147,16 @@ export default function AnnouncementBell() {
       {open && (
         <div style={{
           position: "absolute",
-          top: "calc(100% + 8px)",
+          top: "calc(100% + 10px)",
           right: 0,
-          width: 320,
-          maxHeight: 420,
+          width: 340,
+          maxHeight: 440,
           overflowY: "auto",
           background: "#fff",
           border: "1.5px solid #e0e7ff",
-          borderRadius: 14,
-          boxShadow: "0 12px 36px rgba(99,102,241,.18)",
-          zIndex: 2000,
+          borderRadius: 16,
+          boxShadow: "0 16px 48px rgba(99,102,241,.22)",
+          zIndex: 3000,
           fontFamily: "'Noto Sans JP',sans-serif",
         }}>
           {/* ヘッダー */}
@@ -153,50 +164,66 @@ export default function AnnouncementBell() {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: "12px 14px 10px",
-            borderBottom: "1px solid #f0f0ff",
+            padding: "14px 16px 12px",
+            borderBottom: "1.5px solid #f0f0ff",
             position: "sticky",
             top: 0,
             background: "#fff",
             zIndex: 1,
+            borderRadius: "16px 16px 0 0",
           }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: "#1e1b4b" }}>🔔 新機能のお知らせ</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: "#1e1b4b" }}>🔔 新機能のお知らせ</span>
+              {unreadCount > 0 && (
+                <span style={{
+                  background: "#6366f1",
+                  color: "#fff",
+                  fontSize: 10,
+                  fontWeight: 800,
+                  borderRadius: 20,
+                  padding: "1px 7px",
+                }}>
+                  {unreadCount}件未読
+                </span>
+              )}
+            </div>
             <button
               onClick={markAllRead}
-              style={{ fontSize: 10, color: "#6366f1", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", fontWeight: 700 }}
+              style={{ fontSize: 10, color: "#6366f1", background: "#f0f0ff", border: "none", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", fontWeight: 700, borderRadius: 6, padding: "3px 8px" }}
             >すべて既読</button>
           </div>
 
           {/* お知らせ一覧 */}
-          <div style={{ padding: "8px 0" }}>
-            {ANNOUNCEMENTS.map((a) => {
+          <div>
+            {ANNOUNCEMENTS.map((a, idx) => {
               const isRead = readIds.includes(a.id);
               return (
                 <div key={a.id} style={{
-                  padding: "10px 14px",
-                  borderBottom: "1px solid #f8f7ff",
+                  padding: "12px 16px",
+                  borderBottom: idx < ANNOUNCEMENTS.length - 1 ? "1px solid #f0f0ff" : "none",
                   background: isRead ? "#fff" : "#f5f3ff",
-                  transition: "background .2s",
+                  transition: "background .3s",
                 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                     {!isRead && (
                       <span style={{
-                        width: 7,
-                        height: 7,
+                        width: 8,
+                        height: 8,
                         borderRadius: "50%",
                         background: "#6366f1",
                         flexShrink: 0,
-                        marginTop: 4,
+                        marginTop: 5,
                       }} />
                     )}
+                    {isRead && <span style={{ width: 8, flexShrink: 0 }} />}
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#1e1b4b", lineHeight: 1.5, marginBottom: 4 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#1e1b4b", lineHeight: 1.5, marginBottom: 5 }}>
                         {a.title}
                       </div>
-                      <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
+                      <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.7 }}>
                         {a.body}
                       </div>
-                      <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>{a.date}</div>
+                      <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 5 }}>{a.date}</div>
                     </div>
                   </div>
                 </div>
@@ -205,6 +232,18 @@ export default function AnnouncementBell() {
           </div>
         </div>
       )}
+
+      {/* ベルアニメーション用CSS */}
+      <style>{`
+        @keyframes bellShake {
+          0%, 100% { transform: rotate(0deg); }
+          10% { transform: rotate(-12deg); }
+          20% { transform: rotate(12deg); }
+          30% { transform: rotate(-8deg); }
+          40% { transform: rotate(8deg); }
+          50% { transform: rotate(0deg); }
+        }
+      `}</style>
     </div>
   );
 }
