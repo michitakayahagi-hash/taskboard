@@ -9,6 +9,7 @@ import ImportModal from "./ImportModal";
 import { ProjectLoginModal, ProjectMemberSettings } from "./ProjectAccessModal";
 import { SubtaskTemplatePanel } from "@/features/SubtaskTemplatePanel";
 import HelpModal from "./HelpModal";
+import AnnouncementBell from "./AnnouncementBell";
 import AssigneeView from "@/features/AssigneeView";
 
 // ─── 定数 ────────────────────────────────────────────────────────────────────
@@ -1848,6 +1849,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
             await utils.task.list.refetch({ projectId: project.id });
           }} title="更新" style={{ flexShrink: 0, background: "#f8f7ff", color: "#6366f1", border: "1.5px solid #e0e7ff", borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer", transition: "background .15s" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#f8f7ff")}>🔄</button>
+        <AnnouncementBell />
         <button onClick={() => setShowHelp(true)} title="使い方" style={{ flexShrink: 0, background: "#f8f7ff", color: "#6366f1", border: "1.5px solid #e0e7ff", borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer", fontWeight: 800 }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#f8f7ff")}>?</button>
         <button onClick={() => setShowSettings(true)} style={{ flexShrink: 0, background: webhookUrl ? "#f0fdf4" : "#f8f7ff", color: webhookUrl ? "#10b981" : "#94a3b8", border: `1.5px solid ${webhookUrl ? "#6ee7b7" : "#e0e7ff"}`, borderRadius: 10, padding: "7px 11px", fontSize: 15, cursor: "pointer" }}>⚙️</button>
