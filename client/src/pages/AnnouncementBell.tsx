@@ -38,7 +38,7 @@ export const ANNOUNCEMENTS: { id: string; date: string; title: string; body: str
   },
 ];
 
-const STORAGE_KEY = "taskboard_read_announcements_v2";
+const STORAGE_KEY = "taskboard_read_announcements_v3";
 
 function getReadIds(): string[] {
   try {

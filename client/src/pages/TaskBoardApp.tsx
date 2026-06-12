@@ -1345,8 +1345,9 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
         </div>
         <span style={{ fontSize: 13, color: "#94a3b8" }}>プロジェクト一覧</span>
         <div style={{ flex: 1 }} />
-        <button onClick={onShowAssigneeView} title="担当者ダッシュボード" style={{ background: "#f8f7ff", color: "#6366f1", border: "1.5px solid #e0e7ff", borderRadius: 10, padding: "7px 12px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontWeight: 700, fontFamily: "'Noto Sans JP',sans-serif", transition: "background .15s", whiteSpace: "nowrap" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#f8f7ff")}>👥 担当者</button>
+        <button onClick={onShowAssigneeView} title="担当者ダッシュボード" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", boxShadow: "0 4px 14px rgba(99,102,241,.4)", transition: "opacity .15s, transform .15s" }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = ""; }}>👥 担当者ダッシュボード</button>
         <button onClick={async (e) => {
             const btn = e.currentTarget;
             btn.style.transform = "rotate(360deg)";
