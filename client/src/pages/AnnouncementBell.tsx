@@ -156,7 +156,7 @@ export default function AnnouncementBell() {
           border: "1.5px solid #e0e7ff",
           borderRadius: 16,
           boxShadow: "0 16px 48px rgba(99,102,241,.22)",
-          zIndex: 3000,
+          zIndex: 99999,
           fontFamily: "'Noto Sans JP',sans-serif",
         }}>
           {/* ヘッダー */}
