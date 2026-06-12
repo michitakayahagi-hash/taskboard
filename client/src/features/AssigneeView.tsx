@@ -220,8 +220,14 @@ export default function AssigneeView({ onBack }: { onBack: () => void }) {
                 const dueStatus = getDueStatus(task.due);
                 const cardBorder = dueStatus === "overdue" ? "1.5px solid #fca5a5" : "1.5px solid #e0e7ff";
                 const cardBg = dueStatus === "overdue" ? "#fff5f5" : "#fff";
+                const handleTaskClick = () => {
+                  const url = `${window.location.origin}${window.location.pathname}?project=${task.projectId}&task=${task.id}`;
+                  window.location.href = url;
+                };
                 return (
-                  <div key={task.id} style={{ background: cardBg, border: cardBorder, borderRadius: 12, padding: "12px 14px", boxShadow: "0 1px 6px rgba(99,102,241,.06)" }}>
+                  <div key={task.id} onClick={handleTaskClick} style={{ background: cardBg, border: cardBorder, borderRadius: 12, padding: "12px 14px", boxShadow: "0 1px 6px rgba(99,102,241,.06)", cursor: "pointer", transition: "box-shadow .15s, transform .15s" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 16px rgba(99,102,241,.18)"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 6px rgba(99,102,241,.06)"; (e.currentTarget as HTMLDivElement).style.transform = ""; }}>
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
                       <span style={{ fontSize: 11, background: pri.color + "22", color: pri.color, borderRadius: 6, padding: "2px 7px", fontWeight: 700, flexShrink: 0 }}>{pri.label}</span>
                       <span style={{ fontSize: 14, fontWeight: 700, color: "#1e1b4b", flex: 1, lineHeight: 1.4 }}>{task.title}</span>

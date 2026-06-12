@@ -1947,11 +1947,14 @@ export default function TaskBoardApp() {
 
   const currentProject = projects.find((p) => p.id === currentProjectId);
 
-  // URLパラメータからプロジェクトを自動選択
+  // URLパラメータからプロジェクトを自動選択（担当者ダッシュボードからの遷移対応）
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const projectId = params.get("project");
-    if (projectId) setCurrentProjectId(projectId);
+    if (projectId) {
+      setCurrentProjectId(projectId);
+      setShowAssigneeView(false); // 担当者ダッシュボードを閉じる
+    }
   }, []);
 
   const createColumn = trpc.column.create.useMutation({ onSuccess: () => utils.column.list.invalidate() });
