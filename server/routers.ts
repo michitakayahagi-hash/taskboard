@@ -252,20 +252,41 @@ export const appRouter = router({
         prevCol: z.string().nullable().optional(),
         createdBy: z.string().nullable().optional(),
         taskStatus: z.string().nullable().optional(),
+        changedBy: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const { id, ...data } = input;
-        // due変更時に履歴を記録
-        if (data.due !== undefined) {
+        const { id, changedBy: inputChangedBy, ...data } = input;
+        // due / dueStart 変更時に履歴を記録 & Webhook通知
+        const DUE_WEBHOOK_URL = "https://chat.googleapis.com/v1/spaces/AAQAQO1z8W4/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=374QrZnIKaPqcIqKWP_rqofOLOyBhK4PUbX1PxKFKm8";
+        if (data.due !== undefined || data.dueStart !== undefined) {
           try {
             const current = await db.getTaskById(id);
             const prevDue = current?.due ?? null;
-            const newDue = data.due ?? null;
-            if (prevDue !== newDue) {
-              const changedBy = (ctx as any)?.req?.cookies ? (() => { try { const raw = (ctx as any).req.cookies["tb_proj_session"]; if (raw) { const p = JSON.parse(Buffer.from(raw.split(".")[1] ?? "", "base64").toString()); return p?.name || undefined; } } catch { return undefined; } })() : undefined;
+            const newDue = data.due !== undefined ? (data.due ?? null) : prevDue;
+            const prevDueStart = (current as any)?.dueStart ?? null;
+            const newDueStart = data.dueStart !== undefined ? (data.dueStart ?? null) : prevDueStart;
+            const changedBy = inputChangedBy || ((ctx as any)?.req?.cookies ? (() => { try { const raw = (ctx as any).req.cookies["tb_proj_session"]; if (raw) { const p = JSON.parse(Buffer.from(raw.split(".")[1] ?? "", "base64").toString()); return p?.name || undefined; } } catch { return undefined; } })() : undefined);
+            // due（終了日）変更時に履歴記録
+            if (data.due !== undefined && prevDue !== newDue) {
               await db.addDueHistory({ taskId: id, prevDue, newDue, changedBy });
             }
-          } catch (_) { /* 履歴記録エラーは無視 */ }
+            // due or dueStart が変わった場合にWebhook通知
+            const dueChanged = data.due !== undefined && prevDue !== newDue;
+            const dueStartChanged = data.dueStart !== undefined && prevDueStart !== newDueStart;
+            if ((dueChanged || dueStartChanged) && current) {
+              const taskTitle = (current as any).title || id;
+              const fmt = (d: string | null) => d ? d.replace(/-/g, "/") : "なし";
+              const lines: string[] = [`📅 *期限日が変更されました*`, `タスク: ${taskTitle}`];
+              if (dueStartChanged) lines.push(`開始日: ${fmt(prevDueStart)} → ${fmt(newDueStart)}`);
+              if (dueChanged) lines.push(`終了日: ${fmt(prevDue)} → ${fmt(newDue)}`);
+              if (changedBy) lines.push(`変更者: ${changedBy}`);
+              fetch(DUE_WEBHOOK_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: lines.join("\n") }),
+              }).catch(() => {});
+            }
+          } catch (_) { /* 履歴・通知エラーは無視 */ }
         }
         await db.updateTask(id, data);
         // 完了カラムに移動した場合、100件超過分を古い順に自動削除

@@ -776,7 +776,7 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
 }
 
 // ─── TaskCard ────────────────────────────────────────────────────────────────
-function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick, onComplete, onRevert, onComment, onUpdateField, onMoveLeft, onMoveRight }: {
+function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick, onComplete, onRevert, onComment, onUpdateField, onMoveLeft, onMoveRight, cols, projectId, onMoveToCol }: {
   task: TaskType; dragging: boolean; members: string[]; doneColIds: string[];
   onPointerDown: (e: React.PointerEvent, task: TaskType) => void;
   onClick: (task: TaskType) => void;
@@ -786,10 +786,14 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
   onUpdateField: (id: string, field: string, value: unknown) => void;
   onMoveLeft?: (task: TaskType) => void;
   onMoveRight?: (task: TaskType) => void;
+  cols?: Col[];
+  projectId?: string;
+  onMoveToCol?: (taskId: string, colId: string) => void;
 }) {
   const p = PRI[task.priority] || PRI.medium;
   const isDone = doneColIds.includes(task.colId);
   const overdue = !isDone && task.due && new Date(task.due) < new Date(new Date().toDateString());
+  const [showColMenu, setShowColMenu] = useState(false);
   return (
     <div onPointerDown={(e) => onPointerDown(e, task)} onClick={() => onClick(task)}
       style={{ background: dragging ? "#f0f0ff" : isDone ? "#f3f4f6" : overdue ? "#fff5f5" : "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, boxShadow: dragging ? "0 0 0 2px #6366f1, 0 8px 24px rgba(99,102,241,.2)" : isDone ? "none" : overdue ? "0 0 0 2px #ef4444, 0 2px 8px rgba(239,68,68,.18)" : "0 1px 4px rgba(99,102,241,.08)", borderLeft: isDone ? "3px solid #d1d5db" : overdue ? "4px solid #ef4444" : `3px solid ${p.color}`, cursor: dragging ? "grabbing" : "grab", opacity: isDone ? 0.6 : dragging ? 0.4 : 1, transition: "box-shadow .12s,opacity .12s,background .12s", touchAction: "pan-x pan-y" }}>
@@ -888,6 +892,36 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
       <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", alignItems: "center", flexWrap: "nowrap", overflow: "hidden" }}>
         {onMoveLeft && <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onMoveLeft(task); }} title="左のカラムへ移動" style={{ fontSize: 13, fontWeight: 700, color: "#6366f1", background: "#ede9fe", border: "1.5px solid #c4b5fd", borderRadius: 8, padding: "3px 7px", cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>←</button>}
         {onMoveRight && <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onMoveRight(task); }} title="右のカラムへ移動" style={{ fontSize: 13, fontWeight: 700, color: "#6366f1", background: "#ede9fe", border: "1.5px solid #c4b5fd", borderRadius: 8, padding: "3px 7px", cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>→</button>}
+        {onMoveToCol && cols && cols.length > 1 && (
+          <div style={{ position: "relative" }} onPointerDown={(e) => e.stopPropagation()}>
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowColMenu((v) => !v); }}
+              title="カラムを移動"
+              style={{ fontSize: 11, fontWeight: 700, color: "#7c3aed", background: "#f5f3ff", border: "1.5px solid #c4b5fd", borderRadius: 8, padding: "4px 7px", cursor: "pointer", flexShrink: 0, lineHeight: 1 }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#f5f3ff")}
+            >↙</button>
+            {showColMenu && (
+              <div
+                style={{ position: "fixed", background: "#fff", border: "1.5px solid #e0e7ff", borderRadius: 12, boxShadow: "0 8px 24px rgba(99,102,241,.18)", zIndex: 99999, minWidth: 160, padding: 6 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, padding: "4px 8px 6px", borderBottom: "1px solid #f0f0ff" }}>↙ 移動先カラム</div>
+                {cols.filter((c) => c.id !== task.colId).map((c) => (
+                  <button key={c.id}
+                    onClick={(e) => { e.stopPropagation(); onMoveToCol(task.id, c.id); setShowColMenu(false); }}
+                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", fontSize: 12, color: "#1e1b4b", textAlign: "left" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f3ff")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: c.color, flexShrink: 0, display: "inline-block" }} />
+                    {c.title}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onComment(task); }} style={{ fontSize: 11, fontWeight: 700, color: "#1877F2", background: "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: 8, padding: "4px 7px", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", flexShrink: 0 }}>💬</button>
         {isDone
           ? <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onRevert(task); }} style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", background: "#f1f5f9", border: "none", borderRadius: 8, padding: "4px 7px", cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", flexShrink: 0 }}>↩ 戻す</button>
@@ -898,7 +932,7 @@ function TaskCard({ task, dragging, members, doneColIds, onPointerDown, onClick,
 }
 
 // ─── Column ───────────────────────────────────────────────────────────────────
-function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs, onColDragStart, onColDragOver, onColDrop, colDraggingId, onMoveColTasks, allProjects, onMoveColLeft, onMoveColRight, canMoveLeft, canMoveRight }: {
+function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, onPointerDown, onCardClick, onComplete, onRevert, onComment, onUpdateField, onAddTask, onUpdateColTitle, onDeleteCol, colRef, cardRefs, onColDragStart, onColDragOver, onColDrop, colDraggingId, onMoveColTasks, allProjects, onMoveColLeft, onMoveColRight, canMoveLeft, canMoveRight, allCols, projectId, onMoveToCol }: {
   col: Col; tasks: TaskType[]; draggingId: string | null; dropTarget: { col: string; index: number } | null; members: string[]; doneColIds: string[];
   onPointerDown: (e: React.PointerEvent, task: TaskType) => void;
   onCardClick: (task: TaskType) => void;
@@ -921,6 +955,9 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
   onMoveColRight?: () => void;
   canMoveLeft?: boolean;
   canMoveRight?: boolean;
+  allCols?: Col[];
+  projectId?: string;
+  onMoveToCol?: (taskId: string, colId: string) => void;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(col.title);
@@ -1027,7 +1064,7 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
         {insertIdx === 0 && <DropLine />}
         {displayTasks.map((task, i) => (
           <div key={task.id} ref={(el) => { cardRefs.current[task.id] = el; }}>
-            <TaskCard task={task} dragging={draggingId === task.id} members={members} doneColIds={doneColIds} onPointerDown={onPointerDown} onClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={onComment} onUpdateField={onUpdateField} />
+            <TaskCard task={task} dragging={draggingId === task.id} members={members} doneColIds={doneColIds} onPointerDown={onPointerDown} onClick={onCardClick} onComplete={onComplete} onRevert={onRevert} onComment={onComment} onUpdateField={onUpdateField} cols={allCols} projectId={projectId} onMoveToCol={onMoveToCol} />
             {insertIdx === i + 1 && <DropLine />}
           </div>
         ))}
@@ -1047,7 +1084,8 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
   const [form, setForm] = useState({ title: "", colId: defaultCol || cols[0]?.id || "", assignee: "", priority: "medium", due: "", dueStart: "", tags: [] as string[], description: "" });
   const [assignee2, setAssignee2] = useState("");
   const [tagInput, setTagInput] = useState("");
-  const [createdBySelected, setCreatedBySelected] = useState(currentUser || "");
+  const [createdBySelected, setCreatedBySelected] = useState("");
+  const [creatorError, setCreatorError] = useState(false);
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const addTag = () => { if (tagInput.trim() && !form.tags.includes(tagInput.trim())) { set("tags", [...form.tags, tagInput.trim()]); setTagInput(""); } };
   const combinedAssignee = assignee2 ? `${form.assignee},${assignee2}` : form.assignee;
@@ -1120,15 +1158,20 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
           ))}
         </div>
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>👤 作成者</label>
-          <select value={createdBySelected} onChange={(e) => setCreatedBySelected(e.target.value)} style={{ width: "100%", border: "2px solid #e0e7ff", borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#fff" }}>
-            <option value="">作成者なし</option>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: creatorError ? "#ef4444" : "#6366f1", marginBottom: 4 }}>👤 作成者 <span style={{ color: "#ef4444" }}>*</span></label>
+          <select value={createdBySelected} onChange={(e) => { setCreatedBySelected(e.target.value); setCreatorError(false); }} style={{ width: "100%", border: `2px solid ${creatorError ? "#ef4444" : createdBySelected ? "#6366f1" : "#e0e7ff"}`, borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: createdBySelected ? "#1e1b4b" : "#94a3b8", background: creatorError ? "#fff5f5" : "#fff" }}>
+            <option value="">-- 選択してください --</option>
             {members.map((m: string) => <option key={m} value={m}>{m}</option>)}
           </select>
+          {creatorError && <p style={{ margin: "4px 0 0", fontSize: 11, color: "#ef4444", fontWeight: 700 }}>⚠ 作成者を選択してください</p>}
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
-          <button onClick={() => form.title.trim() && onSave({ ...form, assignee: combinedAssignee, createdBy: createdBySelected || undefined, description: form.description || undefined })} style={{ background: form.title.trim() ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: form.title.trim() ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: form.title.trim() ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
+          <button onClick={() => {
+            if (!form.title.trim()) return;
+            if (!createdBySelected) { setCreatorError(true); return; }
+            onSave({ ...form, assignee: combinedAssignee, createdBy: createdBySelected, description: form.description || undefined });
+          }} style={{ background: form.title.trim() && createdBySelected ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: form.title.trim() && createdBySelected ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: form.title.trim() && createdBySelected ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
         </div>
       </div>
     </div>
@@ -1328,9 +1371,9 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isP
 }
 
 /// ─── ProjectList ────────────────────────────────────────────────────────────
-function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete, onRename, onRefresh, onDuplicate, onShowAssigneeView }: {
+function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete, onRename, onRefresh, onDuplicate, onShowAssigneeView, onOpenRoadmap }: {
   projects: ProjectType[]; taskCounts: Record<string, { total: number; done: number; dueToday: number }>;
-  onSelect: (id: string) => void; onAdd: () => void; onImport: () => void; onDelete: (id: string) => void; onRename: (id: string, name: string) => void; onRefresh: () => void; onDuplicate: (id: string) => void; onShowAssigneeView: () => void;
+  onSelect: (id: string) => void; onAdd: () => void; onImport: () => void; onDelete: (id: string) => void; onRename: (id: string, name: string) => void; onRefresh: () => void; onDuplicate: (id: string) => void; onShowAssigneeView: () => void; onOpenRoadmap: () => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameVal, setNameVal] = useState("");
@@ -1343,8 +1386,10 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
           <div style={{ width: 30, height: 30, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>📋</div>
           <span style={{ fontWeight: 800, fontSize: 15, color: "#1e1b4b" }}>TaskBoard</span>
         </div>
-        <span style={{ fontSize: 13, color: "#94a3b8" }}>プロジェクト一覧</span>
+
         <div style={{ flex: 1 }} />
+        <button onClick={onOpenRoadmap} title="ロードマップ" style={{ background: "#fff", color: "#6366f1", border: "1.5px solid #6366f1", borderRadius: 10, padding: "8px 14px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", transition: "background .15s" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}>📅 ロードマップ</button>
         <button onClick={onShowAssigneeView} title="担当者ダッシュボード" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", boxShadow: "0 4px 14px rgba(99,102,241,.4)", transition: "opacity .15s, transform .15s" }}
           onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; e.currentTarget.style.transform = "translateY(-1px)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = ""; }}>👥 担当者ダッシュボード</button>
@@ -1417,7 +1462,7 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
 }
 
 // ─── BoardView (Access Control Wrapper) ────────────────────────────────────────────────────────────────────────────────────
-function BoardView({ project, onBack, allProjects }: { project: ProjectType; onBack: () => void; allProjects: ProjectType[] }) {
+function BoardView({ project, onBack, allProjects, initialOpenTaskId, onInitialTaskOpened }: { project: ProjectType; onBack: () => void; allProjects: ProjectType[]; initialOpenTaskId?: string | null; onInitialTaskOpened?: () => void }) {
   const utils = trpc.useUtils();
   const restrictionQuery = trpc.projectAccess.hasRestriction.useQuery({ projectId: project.id });
   const sessionQuery = trpc.projectAccess.getSession.useQuery({ projectId: project.id });
@@ -1458,16 +1503,20 @@ function BoardView({ project, onBack, allProjects }: { project: ProjectType; onB
       projectSession={projectSession ?? null}
       onLogout={() => logoutProject.mutate({ projectId: project.id })}
       allProjects={allProjects}
+      initialOpenTaskId={initialOpenTaskId}
+      onInitialTaskOpened={onInitialTaskOpened}
     />
   );
 }
 
-function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession, onLogout, allProjects }: {
+function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession, onLogout, allProjects, initialOpenTaskId, onInitialTaskOpened }: {
   project: ProjectType; onBack: () => void;
   canEdit: boolean; isRestricted: boolean;
   projectSession: { name: string; role: string; isAdmin?: boolean } | null;
   allProjects?: ProjectType[];
   onLogout: () => void;
+  initialOpenTaskId?: string | null;
+  onInitialTaskOpened?: () => void;
 }) {
   const utils = trpc.useUtils();
 
@@ -1551,6 +1600,17 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
       if (found) setDetailTask(found);
     }
   }, [tasks.length]);
+
+  // ロードマップからの遷移：initialOpenTaskIdが指定されたらタスク詳細を自動オープン
+  useEffect(() => {
+    if (initialOpenTaskId && tasks.length > 0) {
+      const found = tasks.find((t) => t.id === initialOpenTaskId);
+      if (found) {
+        setDetailTask(found);
+        onInitialTaskOpened?.();
+      }
+    }
+  }, [initialOpenTaskId, tasks.length]);
 
   const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -1720,12 +1780,12 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
     colList.forEach((t) => { updateTask.mutate({ id: t.id, sortOrder: t.sortOrder + 1 }); });
     createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, dueStart: form.dueStart || null, tags: form.tags, sortOrder: 0, createdBy: form.createdBy || undefined, description: form.description || undefined });
     // Google Chat通知
-    if (webhookUrl && form.assignee) {
+    if (webhookUrl) {
       const colName = cols.find((c) => c.id === form.colId)?.title || "";
       const priorityLabel = form.priority === "high" ? "🔴 高" : form.priority === "medium" ? "🟡 中" : "🟢 低";
       const chatText = [
         `━━━━━━━━━━━━━━━━━━━━`,
-        `👤 *担当者：${form.assignee}* へのタスク通知`,
+        form.assignee ? `👤 *担当者：${form.assignee}* へのタスク通知` : `📋 新しいタスクが作成されました`,
         `━━━━━━━━━━━━━━━━━━━━`,
         `📋 *${form.title}*`,
         ``,
@@ -1733,7 +1793,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
         `⚡ 優先度：${priorityLabel}`,
         form.due ? `📅 期限：${form.due}` : null,
         ``,
-        `${form.assignee} タスクが割り当てられました`,
+        form.assignee ? `${form.assignee} タスクが割り当てられました` : `担当者未設定`,
         `🔗 ${window.location.origin}?project=${project.id}`,
         `━━━━━━━━━━━━━━━━━━━━`,
       ].filter(Boolean).join("\n");
@@ -1891,6 +1951,9 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
                 [newOrder[fi], newOrder[ti]] = [newOrder[ti], newOrder[fi]];
                 newOrder.forEach((c, i) => updateCol.mutate({ id: c.id, sortOrder: i }));
               } : undefined}
+              allCols={cols}
+              projectId={project.id}
+              onMoveToCol={canEdit ? (taskId, colId) => { moveTask.mutate({ id: taskId, targetProjectId: project.id, targetColId: colId }); } : undefined}
             />
           );
         })}
@@ -1931,7 +1994,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
 }
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
-export default function TaskBoardApp() {
+export default function TaskBoardApp({ onOpenRoadmap, pendingProjectId, pendingTaskId, onPendingConsumed }: { onOpenRoadmap?: () => void; pendingProjectId?: string | null; pendingTaskId?: string | null; onPendingConsumed?: () => void }) {
   const utils = trpc.useUtils();
   const projectsQuery = trpc.project.list.useQuery();
   const projects: ProjectType[] = projectsQuery.data || [];
@@ -1957,6 +2020,17 @@ export default function TaskBoardApp() {
       setShowAssigneeView(false); // 担当者ダッシュボードを閉じる
     }
   }, []);
+
+  // ロードマップからの遷移対応
+  const [pendingOpenTaskId, setPendingOpenTaskId] = useState<string | null>(null);
+  useEffect(() => {
+    if (pendingProjectId && projects.length > 0) {
+      setCurrentProjectId(pendingProjectId);
+      setShowAssigneeView(false);
+      if (pendingTaskId) setPendingOpenTaskId(pendingTaskId);
+      onPendingConsumed?.();
+    }
+  }, [pendingProjectId, projects]);
 
   const createColumn = trpc.column.create.useMutation({ onSuccess: () => utils.column.list.invalidate() });
 
@@ -2008,7 +2082,7 @@ export default function TaskBoardApp() {
   }
 
   if (currentProject) {
-    return <BoardView project={currentProject} onBack={() => setCurrentProjectId(null)} allProjects={projects} />;
+    return <BoardView project={currentProject} onBack={() => { setCurrentProjectId(null); setPendingOpenTaskId(null); }} allProjects={projects} initialOpenTaskId={pendingOpenTaskId} onInitialTaskOpened={() => setPendingOpenTaskId(null)} />;
   }
 
   if (showAssigneeView) {
@@ -2017,7 +2091,7 @@ export default function TaskBoardApp() {
 
   return (
     <>
-      <ProjectList projects={projects} taskCounts={taskCounts} onSelect={setCurrentProjectId} onAdd={() => setShowAddProject(true)} onImport={() => setShowImport(true)} onDelete={handleDelete} onRename={handleRename} onRefresh={async () => { await utils.project.list.invalidate(); await utils.task.list.invalidate(); await utils.column.list.invalidate(); }} onDuplicate={handleDuplicate} onShowAssigneeView={() => setShowAssigneeView(true)} />
+      <ProjectList projects={projects} taskCounts={taskCounts} onSelect={setCurrentProjectId} onAdd={() => setShowAddProject(true)} onImport={() => setShowImport(true)} onDelete={handleDelete} onRename={handleRename} onRefresh={async () => { await utils.project.list.invalidate(); await utils.task.list.invalidate(); await utils.column.list.invalidate(); }} onDuplicate={handleDuplicate} onShowAssigneeView={() => setShowAssigneeView(true)} onOpenRoadmap={() => onOpenRoadmap?.()} />
       {showAddProject && <AddProjectModal onClose={() => setShowAddProject(false)} onSave={addProject} existingCount={projects.length} />}
       {showImport && <ImportModal onClose={() => { setShowImport(false); utils.project.list.invalidate(); }} onImported={(pid: string) => { setShowImport(false); utils.project.list.invalidate(); setCurrentProjectId(pid); }} />}
     </>
