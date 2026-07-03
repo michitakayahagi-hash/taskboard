@@ -90,7 +90,7 @@ export default function RoadmapView({
         return { proj, colGroups };
       })
       .filter((pg) => pg.colGroups.length > 0);
-  }, [projects, allTasksQueries, selectedProject, showDone]);
+  }, [projects, allTasksQueries, showDone]);
 
   // 表示期間を計算（全タスクから）
   const { startDate, endDate, totalDays } = useMemo(() => {
