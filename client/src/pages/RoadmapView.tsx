@@ -53,7 +53,6 @@ export default function RoadmapView({
   const projectsQuery = trpc.project.list.useQuery();
   const projects: ProjectType[] = projectsQuery.data || [];
 
-  const [selectedProject, setSelectedProject] = useState<string>("all");
   const [showDone, setShowDone] = useState(false);
   // 折りたたみ状態: projectId -> boolean(collapsed)
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
@@ -70,7 +69,6 @@ export default function RoadmapView({
   // プロジェクト > カラム > タスク の構造を構築
   const projectGroups = useMemo(() => {
     return projects
-      .filter((p) => selectedProject === "all" || p.id === selectedProject)
       .map((proj) => {
         const q = allTasksQueries.find((x) => x.id === proj.id);
         const tasks = (q?.tasks.data || []) as TaskType[];
@@ -161,18 +159,6 @@ export default function RoadmapView({
           style={{ background: "#f0f0ff", border: "none", borderRadius: 8, padding: "7px 14px", cursor: "pointer", color: "#6366f1", fontWeight: 700, fontSize: 13 }}
         >← 戻る</button>
         <span style={{ fontWeight: 800, fontSize: 16, color: "#1e1b4b" }}>📅 ロードマップ</span>
-
-        {/* プロジェクト選択 */}
-        <select
-          value={selectedProject}
-          onChange={(e) => setSelectedProject(e.target.value)}
-          style={{ border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: "#1e1b4b", background: "#fff", cursor: "pointer" }}
-        >
-          <option value="all">全プロジェクト</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
 
         {/* 完了タスク表示切り替え */}
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b", cursor: "pointer" }}>
