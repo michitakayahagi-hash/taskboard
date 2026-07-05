@@ -276,7 +276,8 @@ export const appRouter = router({
             if ((dueChanged || dueStartChanged) && current) {
               const taskTitle = (current as any).title || id;
               const fmt = (d: string | null) => d ? d.replace(/-/g, "/") : "なし";
-              const lines: string[] = [`📅 *期限日が変更されました*`, `タスク: ${taskTitle}`];
+              const taskUrl = `https://proactive-caring-production-1be5.up.railway.app/?task=${id}`;
+              const lines: string[] = [`📅 *期限日が変更されました*`, `タスク: <${taskUrl}|${taskTitle}>`];
               if (dueStartChanged) lines.push(`開始日: ${fmt(prevDueStart)} → ${fmt(newDueStart)}`);
               if (dueChanged) lines.push(`終了日: ${fmt(prevDue)} → ${fmt(newDue)}`);
               if (changedBy) lines.push(`変更者: ${changedBy}`);
