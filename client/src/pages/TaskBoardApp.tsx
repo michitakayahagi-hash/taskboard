@@ -56,7 +56,7 @@ function renderCommentText(text: string): React.ReactNode[] {
 
 // ─── 型定義 ──────────────────────────────────────────────────────────────────
 interface Col { id: string; title: string; color: string; sortOrder: number; }
-interface Subtask { id: number; text: string; done: boolean; assignee?: string; url?: string; due?: string; }
+interface Subtask { id: number; text: string; done: boolean; assignee?: string; url?: string; dueStart?: string; due?: string; }
 interface CommentType { id?: number; author: string; text: string; createdAt?: Date | string; }
 interface TaskType {
   id: string; colId: string; sortOrder: number; title: string; assignee: string;
@@ -656,8 +656,10 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
                     />
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: 32 }}>
-                    <span style={{ fontSize: 11, color: "#94a3b8" }}>📅 期日:</span>
-                    <CustomDatePicker value={s.due || ""} onChange={(v) => { const ns = [...task.subtasks]; ns[i] = { ...s, due: v || undefined }; onUpdateSubtasks(task.id, ns); }} />
+                    <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>📅 開始:</span>
+                    <CustomDatePicker value={s.dueStart || ""} onChange={(v) => { const ns = [...task.subtasks]; ns[i] = { ...s, dueStart: v || undefined }; onUpdateSubtasks(task.id, ns); }} placeholder="開始日" />
+                    <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>〜 終了:</span>
+                    <CustomDatePicker value={s.due || ""} onChange={(v) => { const ns = [...task.subtasks]; ns[i] = { ...s, due: v || undefined }; onUpdateSubtasks(task.id, ns); }} placeholder="終了日" />
                     {s.due && (() => {
                       const today = new Date().toISOString().slice(0, 10);
                       const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();

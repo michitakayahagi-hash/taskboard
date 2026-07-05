@@ -2,11 +2,21 @@
  * RoadmapView - ガントチャート形式のロードマップページ
  * ・全プロジェクトのタスクを横軸（日付）×縦軸（プロジェクト > カラム）で表示
  * ・期限開始日〜期限日をバーで表示
+ * ・小タスクにも開始日・終了日があればガントバーを表示
  * ・今日の位置に赤い縦線
  * ・期限超過タスクは赤く強調
  */
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+
+type SubtaskType = {
+  id: number;
+  text: string;
+  done: boolean;
+  dueStart?: string;
+  due?: string;
+  assignee?: string;
+};
 
 type TaskType = {
   id: string;
@@ -18,6 +28,7 @@ type TaskType = {
   priority: string;
   assignee: string;
   taskStatus?: string | null;
+  subtasks?: SubtaskType[];
 };
 
 type ProjectType = { id: string; name: string; color: string };
@@ -41,6 +52,7 @@ function diffDays(a: Date, b: Date) {
 
 const CELL_W = 28;
 const ROW_H = 34;
+const SUB_ROW_H = 26;
 const LABEL_W = 200;
 
 export default function RoadmapView({
@@ -82,8 +94,11 @@ export default function RoadmapView({
               (t) => t.taskStatus !== "done" && !col.title.toLowerCase().includes("done") && !col.title.includes("完了")
             );
           }
-          // 期限があるタスクのみ
-          colTasks = colTasks.filter((t) => t.due || t.dueStart);
+          // 期限があるタスク、または期限付き小タスクがあるタスクのみ
+          colTasks = colTasks.filter((t) => {
+            if (t.due || t.dueStart) return true;
+            return (t.subtasks || []).some((s) => s.dueStart || s.due);
+          });
           return { col, tasks: colTasks };
         }).filter((cg) => cg.tasks.length > 0);
 
@@ -92,7 +107,7 @@ export default function RoadmapView({
       .filter((pg) => pg.colGroups.length > 0);
   }, [projects, allTasksQueries, showDone]);
 
-  // 表示期間を計算（全タスクから）
+  // 表示期間を計算（全タスク・小タスクから）
   const { startDate, endDate, totalDays } = useMemo(() => {
     const dates: Date[] = [];
     for (const pg of projectGroups) {
@@ -102,6 +117,13 @@ export default function RoadmapView({
           const e = parseDate(t.due);
           if (s) dates.push(s);
           if (e) dates.push(e);
+          // 小タスクの日付も考慮
+          for (const sub of (t.subtasks || [])) {
+            const ss = parseDate(sub.dueStart);
+            const se = parseDate(sub.due);
+            if (ss) dates.push(ss);
+            if (se) dates.push(se);
+          }
         }
       }
     }
@@ -214,7 +236,7 @@ export default function RoadmapView({
               ))}
             </div>
 
-            {/* プロジェクト > カラム > タスク */}
+            {/* プロジェクト > カラム > タスク（+ 小タスク） */}
             {projectGroups.map(({ proj, colGroups }) => {
               const isProjectCollapsed = !!collapsedProjects[proj.id];
               return (
@@ -239,7 +261,6 @@ export default function RoadmapView({
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{proj.name}</span>
                     </div>
                     <div style={{ flex: 1, position: "relative", height: 32 }}>
-                      {/* 今日の縦線 */}
                       {todayOffset >= 0 && todayOffset < totalDays && (
                         <div style={{ position: "absolute", left: todayOffset * CELL_W + CELL_W / 2, top: 0, bottom: 0, width: 2, background: "#ef4444", opacity: 0.4, zIndex: 1 }} />
                       )}
@@ -282,16 +303,13 @@ export default function RoadmapView({
                           </div>
                         </div>
 
-                        {/* タスク行 */}
+                        {/* タスク行 + 小タスク行 */}
                         {!isColCollapsed && tasks.map((task, ti) => {
                           const dueDate = parseDate(task.due);
                           const startD = parseDate(task.dueStart) || dueDate;
                           const endD = dueDate || startD;
-                          if (!startD || !endD) return null;
 
-                          const left = Math.max(0, diffDays(startDate, startD));
-                          const width = Math.max(1, diffDays(startD, endD) + 1);
-                          const isOverdue = dueDate && dueDate < today && task.taskStatus !== "done";
+                          const isOverdue = dueDate ? dueDate < today && task.taskStatus !== "done" : false;
                           const isDone = task.taskStatus === "done";
                           const isTodayDue = dueDate &&
                             dueDate.getFullYear() === today.getFullYear() &&
@@ -306,77 +324,144 @@ export default function RoadmapView({
                             ? "#f97316"
                             : proj.color || "#6366f1";
 
+                          // 期限付き小タスク
+                          const subtasksWithDates = (task.subtasks || []).filter(
+                            (s) => s.dueStart || s.due
+                          );
+
                           return (
-                            <div key={task.id} style={{ display: "flex", borderBottom: "1px solid #f0f0ff", height: ROW_H }}>
-                              {/* タスク名ラベル */}
-                              <div style={{
-                                width: LABEL_W, flexShrink: 0,
-                                padding: "0 8px 0 40px",
-                                display: "flex", alignItems: "center",
-                                borderRight: "1.5px solid #e0e7ff",
-                                position: "sticky", left: 0, background: "#fff", zIndex: 4,
-                                gap: 4,
-                              }}>
-                                {isOverdue && <span style={{ fontSize: 9, color: "#ef4444", flexShrink: 0 }}>🚨</span>}
-                                {isTodayDue && !isOverdue && <span style={{ fontSize: 9, flexShrink: 0 }}>🔔</span>}
-                                <span
-                                  style={{
-                                    fontSize: 11,
-                                    color: isOverdue ? "#ef4444" : isDone ? "#94a3b8" : "#1e1b4b",
-                                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                    textDecoration: isDone ? "line-through" : "none",
-                                    fontWeight: isOverdue ? 700 : 400,
-                                    cursor: onNavigateToTask ? "pointer" : "default",
-                                  }}
-                                  title={task.title}
-                                  onClick={() => onNavigateToTask?.(task.projectId, task.id)}
-                                >
-                                  {task.title}
-                                </span>
-                              </div>
-
-                              {/* ガントバー */}
-                              <div style={{ flex: 1, position: "relative", background: ti % 2 === 0 ? "#fff" : "#fafbff" }}>
-                                {/* 週末の背景 */}
-                                {headerDays.map((d, di) => d.isWeekend ? (
-                                  <div key={di} style={{ position: "absolute", left: di * CELL_W, top: 0, width: CELL_W, height: "100%", background: "rgba(0,0,0,0.02)" }} />
-                                ) : null)}
-
-                                {/* 今日の縦線 */}
-                                {todayOffset >= 0 && todayOffset < totalDays && (
-                                  <div style={{ position: "absolute", left: todayOffset * CELL_W + CELL_W / 2, top: 0, bottom: 0, width: 2, background: "#ef4444", opacity: 0.15, zIndex: 1 }} />
-                                )}
-
-                                {/* バー */}
-                                <div
-                                  title={`${task.title}\n${task.assignee ? `担当: ${task.assignee}` : ""}\n${startD ? fmt(startD) : ""}〜${endD ? fmt(endD) : ""}\nクリックで詳細を開く`}
-                                  onClick={() => onNavigateToTask?.(task.projectId, task.id)}
-                                  style={{
-                                    position: "absolute",
-                                    left: left * CELL_W + 2,
-                                    top: 5,
-                                    width: width * CELL_W - 4,
-                                    height: ROW_H - 10,
-                                    background: barColor,
-                                    borderRadius: 4,
-                                    opacity: isDone ? 0.5 : 1,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    paddingLeft: 6,
-                                    overflow: "hidden",
-                                    cursor: onNavigateToTask ? "pointer" : "default",
-                                    zIndex: 2,
-                                    boxShadow: isOverdue ? "0 2px 8px rgba(239,68,68,.3)" : "0 1px 4px rgba(0,0,0,.1)",
-                                    transition: "filter .15s, transform .15s",
-                                  }}
-                                  onMouseEnter={(e) => { if (onNavigateToTask) { e.currentTarget.style.filter = "brightness(1.15)"; e.currentTarget.style.transform = "scaleY(1.08)"; } }}
-                                  onMouseLeave={(e) => { e.currentTarget.style.filter = ""; e.currentTarget.style.transform = ""; }}
-                                >
-                                  <span style={{ fontSize: 10, color: "#fff", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                    {width * CELL_W > 40 ? task.title : ""}
+                            <div key={task.id}>
+                              {/* タスク行（期限がある場合のみバーを表示） */}
+                              <div style={{ display: "flex", borderBottom: subtasksWithDates.length > 0 ? "none" : "1px solid #f0f0ff", height: ROW_H }}>
+                                {/* タスク名ラベル */}
+                                <div style={{
+                                  width: LABEL_W, flexShrink: 0,
+                                  padding: "0 8px 0 40px",
+                                  display: "flex", alignItems: "center",
+                                  borderRight: "1.5px solid #e0e7ff",
+                                  position: "sticky", left: 0, background: "#fff", zIndex: 4,
+                                  gap: 4,
+                                }}>
+                                  {isOverdue && <span style={{ fontSize: 9, color: "#ef4444", flexShrink: 0 }}>🚨</span>}
+                                  {isTodayDue && !isOverdue && <span style={{ fontSize: 9, flexShrink: 0 }}>🔔</span>}
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      color: isOverdue ? "#ef4444" : isDone ? "#94a3b8" : "#1e1b4b",
+                                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                      textDecoration: isDone ? "line-through" : "none",
+                                      fontWeight: isOverdue ? 700 : 400,
+                                      cursor: onNavigateToTask ? "pointer" : "default",
+                                    }}
+                                    title={task.title}
+                                    onClick={() => onNavigateToTask?.(task.projectId, task.id)}
+                                  >
+                                    {task.title}
                                   </span>
                                 </div>
+
+                                {/* ガントバー（タスクに期限がある場合のみ） */}
+                                <div style={{ flex: 1, position: "relative", background: ti % 2 === 0 ? "#fff" : "#fafbff" }}>
+                                  {headerDays.map((d, di) => d.isWeekend ? (
+                                    <div key={di} style={{ position: "absolute", left: di * CELL_W, top: 0, width: CELL_W, height: "100%", background: "rgba(0,0,0,0.02)" }} />
+                                  ) : null)}
+                                  {todayOffset >= 0 && todayOffset < totalDays && (
+                                    <div style={{ position: "absolute", left: todayOffset * CELL_W + CELL_W / 2, top: 0, bottom: 0, width: 2, background: "#ef4444", opacity: 0.15, zIndex: 1 }} />
+                                  )}
+                                  {startD && endD && (
+                                    <div
+                                      title={`${task.title}\n${task.assignee ? `担当: ${task.assignee}` : ""}\n${fmt(startD)}〜${fmt(endD)}\nクリックで詳細を開く`}
+                                      onClick={() => onNavigateToTask?.(task.projectId, task.id)}
+                                      style={{
+                                        position: "absolute",
+                                        left: Math.max(0, diffDays(startDate, startD)) * CELL_W + 2,
+                                        top: 5,
+                                        width: Math.max(1, diffDays(startD, endD) + 1) * CELL_W - 4,
+                                        height: ROW_H - 10,
+                                        background: barColor,
+                                        borderRadius: 4,
+                                        opacity: isDone ? 0.5 : 1,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        paddingLeft: 6,
+                                        overflow: "hidden",
+                                        cursor: onNavigateToTask ? "pointer" : "default",
+                                        zIndex: 2,
+                                        boxShadow: isOverdue ? "0 2px 8px rgba(239,68,68,.3)" : "0 1px 4px rgba(0,0,0,.1)",
+                                        transition: "filter .15s, transform .15s",
+                                      }}
+                                      onMouseEnter={(e) => { if (onNavigateToTask) { e.currentTarget.style.filter = "brightness(1.15)"; e.currentTarget.style.transform = "scaleY(1.08)"; } }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.filter = ""; e.currentTarget.style.transform = ""; }}
+                                    >
+                                      <span style={{ fontSize: 10, color: "#fff", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                        {Math.max(1, diffDays(startD, endD) + 1) * CELL_W > 40 ? task.title : ""}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
+
+                              {/* 小タスク行 */}
+                              {subtasksWithDates.map((s, si) => {
+                                const sStart = parseDate(s.dueStart || null) || parseDate(s.due || null);
+                                const sEnd = parseDate(s.due || null) || sStart;
+                                if (!sStart || !sEnd) return null;
+                                const sLeft = Math.max(0, diffDays(startDate, sStart));
+                                const sWidth = Math.max(1, diffDays(sStart, sEnd) + 1);
+                                const sIsOverdue = sEnd < today && !s.done;
+                                const sBarColor = s.done ? "#94a3b8" : sIsOverdue ? "#ef4444" : "#a78bfa";
+                                const isLastSub = si === subtasksWithDates.length - 1;
+                                return (
+                                  <div key={s.id} style={{ display: "flex", borderBottom: isLastSub ? "1px solid #f0f0ff" : "none", height: SUB_ROW_H }}>
+                                    {/* 小タスク名ラベル */}
+                                    <div style={{
+                                      width: LABEL_W, flexShrink: 0,
+                                      padding: "0 8px 0 52px",
+                                      display: "flex", alignItems: "center",
+                                      borderRight: "1.5px solid #e0e7ff",
+                                      position: "sticky", left: 0, background: "#faf8ff", zIndex: 3,
+                                      gap: 3,
+                                    }}>
+                                      <span style={{ fontSize: 9, color: "#a78bfa", flexShrink: 0 }}>└</span>
+                                      <span style={{
+                                        fontSize: 10,
+                                        color: s.done ? "#94a3b8" : sIsOverdue ? "#ef4444" : "#4338ca",
+                                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                        textDecoration: s.done ? "line-through" : "none",
+                                      }} title={s.text}>{s.text}</span>
+                                    </div>
+                                    {/* 小タスクガントバー */}
+                                    <div style={{ flex: 1, position: "relative", background: "#faf8ff" }}>
+                                      {todayOffset >= 0 && todayOffset < totalDays && (
+                                        <div style={{ position: "absolute", left: todayOffset * CELL_W + CELL_W / 2, top: 0, bottom: 0, width: 2, background: "#ef4444", opacity: 0.1, zIndex: 1 }} />
+                                      )}
+                                      <div
+                                        title={`小タスク: ${s.text}\n${s.assignee ? `担当: ${s.assignee}` : ""}\n${fmt(sStart)}〜${fmt(sEnd)}`}
+                                        style={{
+                                          position: "absolute",
+                                          left: sLeft * CELL_W + 2,
+                                          top: 4,
+                                          width: sWidth * CELL_W - 4,
+                                          height: SUB_ROW_H - 8,
+                                          background: sBarColor,
+                                          borderRadius: 3,
+                                          opacity: s.done ? 0.5 : 0.85,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          paddingLeft: 4,
+                                          overflow: "hidden",
+                                          zIndex: 2,
+                                          boxShadow: "0 1px 3px rgba(0,0,0,.1)",
+                                        }}
+                                      >
+                                        <span style={{ fontSize: 9, color: "#fff", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                          {sWidth * CELL_W > 36 ? s.text : ""}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           );
                         })}
@@ -410,6 +495,7 @@ export default function RoadmapView({
           { color: "#ef4444", label: "期限超過" },
           { color: "#f97316", label: "本日が期限" },
           { color: "#6366f1", label: "進行中" },
+          { color: "#a78bfa", label: "小タスク" },
           { color: "#94a3b8", label: "完了" },
         ].map((l) => (
           <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
