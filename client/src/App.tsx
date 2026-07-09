@@ -8,10 +8,11 @@ import { InvitePage } from "./pages/InvitePage";
 import RoadmapView from "./pages/RoadmapView";
 
 function App() {
-  // Simple client-side routing for invite page
+  // URLパラメータから task / project を初期値として読み込む
+  const _initParams = new URLSearchParams(window.location.search);
   const [page, setPage] = useState<"board" | "roadmap">("board");
-  const [pendingProject, setPendingProject] = useState<string | null>(null);
-  const [pendingTask, setPendingTask] = useState<string | null>(null);
+  const [pendingProject, setPendingProject] = useState<string | null>(_initParams.get("project"));
+  const [pendingTask, setPendingTask] = useState<string | null>(_initParams.get("task"));
   const path = window.location.pathname;
   const inviteMatch = path.match(/^\/invite\/([^/]+)$/);
 
