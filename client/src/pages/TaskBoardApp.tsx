@@ -1210,10 +1210,9 @@ function AddProjectModal({ onClose, onSave, existingCount }: { onClose: () => vo
 }
 
 // ─── SettingsModal ────────────────────────────────────────────────────────────
-function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isPublic, onSave, onClose }: {
+function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, onSave, onClose }: {
   webhookUrl: string; members: string[]; projectId: string;
   currentUserIsAdmin?: boolean;
-  isPublic?: boolean;
   onSave: (url: string, members: string[]) => void; onClose: () => void;
 }) {
   const [url, setUrl] = useState(webhookUrl);
@@ -1237,9 +1236,6 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isP
       onSuccess: () => { setStatusSaved(true); setTimeout(() => setStatusSaved(false), 2000); }
     });
   };
-  const [localIsPublic, setLocalIsPublic] = useState<boolean>(isPublic ?? false);
-  const updateProject = trpc.project.update.useMutation();
-  const [publicSaved, setPublicSaved] = useState(false);
   const addMember = () => { if (newMember.trim() && !localMembers.includes(newMember.trim())) { setLocalMembers([...localMembers, newMember.trim()]); setNewMember(""); } };
   const tabStyle = (active: boolean) => ({
     padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
@@ -1327,39 +1323,8 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isP
 
         {activeTab === "access" && (
           <>
-            {/* 公開/非公開トグル */}
-            <div style={{ background: localIsPublic ? "#f0fdf4" : "#fef2f2", border: `1.5px solid ${localIsPublic ? "#6ee7b7" : "#fca5a5"}`, borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: localIsPublic ? "#10b981" : "#ef4444", marginBottom: 4 }}>
-                    {localIsPublic ? "🔓 公開中" : "🔒 非公開"}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#64748b" }}>
-                    {localIsPublic ? "ログイン不要で誰でも閲覧可能" : "アクセス制限あり（メンバーのみ）"}
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    const newVal = !localIsPublic;
-                    setLocalIsPublic(newVal);
-                    updateProject.mutate({ id: projectId, isPublic: newVal }, {
-                      onSuccess: () => { setPublicSaved(true); setTimeout(() => setPublicSaved(false), 2000); }
-                    });
-                  }}
-                  style={{
-                    width: 52, height: 28, borderRadius: 14, border: "none", cursor: "pointer",
-                    background: localIsPublic ? "#10b981" : "#e0e7ff",
-                    position: "relative", transition: "background .2s", flexShrink: 0,
-                  }}
-                >
-                  <div style={{
-                    position: "absolute", top: 4, left: localIsPublic ? 28 : 4,
-                    width: 20, height: 20, borderRadius: "50%", background: "#fff",
-                    boxShadow: "0 1px 4px rgba(0,0,0,.2)", transition: "left .2s",
-                  }} />
-                </button>
-              </div>
-              {publicSaved && <div style={{ marginTop: 8, fontSize: 11, color: "#10b981", fontWeight: 700 }}>✓ 保存しました</div>}
+            <div style={{ background: "#f5f3ff", border: "1.5px solid #c7d2fe", borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 11, color: "#4338ca", lineHeight: 1.6 }}>
+              このアプリはGoogle Workspaceログインが必須です。プロジェクトごとの閲覧・編集権限は、下のメンバー登録で管理します。
             </div>
             <ProjectMemberSettings projectId={projectId} currentUserIsAdmin={currentUserIsAdmin} />
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
@@ -1468,8 +1433,8 @@ function BoardView({ project, onBack, allProjects, initialOpenTaskId, onInitialT
   const utils = trpc.useUtils();
   const restrictionQuery = trpc.projectAccess.hasRestriction.useQuery({ projectId: project.id });
   const sessionQuery = trpc.projectAccess.getSession.useQuery({ projectId: project.id });
-  const logoutProject = trpc.projectAccess.logout.useMutation({
-    onSuccess: () => utils.projectAccess.getSession.invalidate({ projectId: project.id }),
+  const logoutGoogle = trpc.auth.logout.useMutation({
+    onSuccess: () => { window.location.href = "/login"; },
   });
 
   const isRestricted = restrictionQuery.data?.restricted ?? false;
@@ -1503,7 +1468,7 @@ function BoardView({ project, onBack, allProjects, initialOpenTaskId, onInitialT
       canEdit={canEdit}
       isRestricted={isRestricted}
       projectSession={projectSession ?? null}
-      onLogout={() => logoutProject.mutate({ projectId: project.id })}
+      onLogout={() => logoutGoogle.mutate()}
       allProjects={allProjects}
       initialOpenTaskId={initialOpenTaskId}
       onInitialTaskOpened={onInitialTaskOpened}
@@ -1989,7 +1954,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
       )}
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} currentUser={projectSession?.name || members[0] || ""} onClose={() => setModal(null)} onSave={saveTask} />}
       {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} onMoveTask={canEdit ? (id, targetProjectId, targetColId) => { moveTask.mutate({ id, targetProjectId, targetColId }); setDetailTask(null); } : undefined} allProjects={allProjects?.filter(p => p.id !== project.id) || []} onComplete={onComplete} onRevert={onRevert} doneColIds={doneColIds} />}
-      {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isPublic={(project as any).isPublic ?? false} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </div>
   );

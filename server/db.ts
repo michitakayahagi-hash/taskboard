@@ -66,6 +66,40 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) { console.warn("[Database] Cannot get user: database not available"); return undefined; }
+  const result = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * Googleのsubをアプリ内ユーザーに結び付ける。
+ * 同一メールの既存ユーザーがあれば、その行を更新してロール・監査上のIDを維持する。
+ */
+export async function findOrCreateGoogleUser({ openId, email, name }: { openId: string; email: string; name: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existingByOpenId = await getUserByOpenId(openId);
+  if (existingByOpenId) {
+    await db.update(users).set({ email, name, loginMethod: "google", lastSignedIn: new Date() }).where(eq(users.id, existingByOpenId.id));
+    return (await getUserByOpenId(openId))!;
+  }
+
+  const existingByEmail = await getUserByEmail(email);
+  if (existingByEmail) {
+    // 既存行の主キー・roleを残し、ログイン識別子だけをGoogleのsubへ移行する。
+    await db.update(users).set({ openId, email, name, loginMethod: "google", lastSignedIn: new Date() }).where(eq(users.id, existingByEmail.id));
+    return (await getUserByOpenId(openId))!;
+  }
+
+  await upsertUser({ openId, email, name, loginMethod: "google", lastSignedIn: new Date() });
+  const created = await getUserByOpenId(openId);
+  if (!created) throw new Error("Could not create Google user");
+  return created;
+}
+
 // ─── Project helpers ────────────────────────────────────────────────────────
 export async function getProjectById(id: string) {
   const db = await getDb();

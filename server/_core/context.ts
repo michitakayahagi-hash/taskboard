@@ -1,6 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
-import { sdk } from "./sdk";
+import { getGoogleUserFromRequest } from "./googleAuth";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -12,14 +12,11 @@ export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
   let user: User | null = null;
-
   try {
-    user = await sdk.authenticateRequest(opts.req);
+    user = await getGoogleUserFromRequest(opts.req);
   } catch (error) {
-    // Authentication is optional for public procedures.
-    user = null;
+    console.error("[Auth] Failed to read Google session", error);
   }
-
   return {
     req: opts.req,
     res: opts.res,

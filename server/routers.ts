@@ -1,7 +1,8 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { clearGoogleSession } from "./_core/googleAuth";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, router, unprotectedProcedure } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 import bcrypt from "bcryptjs";
@@ -23,6 +24,22 @@ async function getProjectSession(req: { cookies?: Record<string, string> }, proj
   if (session.projectId !== projectId) return null;
   if (Date.now() > session.exp) { await db.deleteProjectSession(raw); return null; }
   return session;
+}
+
+async function getGoogleProjectMember(user: { email?: string | null } | null, projectId: string) {
+  if (!user?.email) return null;
+  return db.getMemberByEmailAndProject(projectId, user.email.toLowerCase());
+}
+
+async function assertGoogleProjectAdmin(user: { email?: string | null } | null, projectId: string) {
+  const hasMembers = await db.hasAnyMember(projectId);
+  // メンバー未設定プロジェクトは、最初の管理者登録を許可する。
+  if (!hasMembers) return null;
+  const member = await getGoogleProjectMember(user, projectId);
+  if (!member?.isAdmin) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "この操作はプロジェクト管理者のみ実行できます" });
+  }
+  return member;
 }
 
 const COL_COLORS = ["#6366f1", "#f59e0b", "#8b5cf6", "#10b981", "#ef4444", "#06b6d4", "#f97316", "#84cc16"];
@@ -80,10 +97,12 @@ function parseCSVLines(text: string): string[][] {
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    // 未認証状態でもログイン画面の表示判定に使えるよう公開する。
+    me: unprotectedProcedure.query(opts => opts.ctx.user),
+    logout: unprotectedProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      clearGoogleSession(ctx.req, ctx.res);
       return { success: true } as const;
     }),
   }),
@@ -631,32 +650,23 @@ export const appRouter = router({
         return { isPublic: project?.isPublic ?? false };
       }),
 
-    // Get current session info for a project
+    // Googleログイン中のメールアドレスを、プロジェクトメンバーのメールアドレスと照合する。
     getSession: publicProcedure
       .input(z.object({ projectId: z.string() }))
       .query(async ({ input, ctx }) => {
-        const session = await getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
-        if (!session) return null;
-        return { name: session.name, role: session.role, isAdmin: session.isAdmin };
+        const member = await getGoogleProjectMember(ctx.user, input.projectId);
+        if (!member) return null;
+        return { name: member.name, email: member.email, role: member.role, isAdmin: member.isAdmin };
       }),
 
-    // Login to a restricted project
+    // 旧来の名前・パスワードログインは廃止する。
     login: publicProcedure
-      .input(z.object({ projectId: z.string(), name: z.string(), password: z.string() }))
-      .mutation(async ({ input, ctx }) => {
-        const member = await db.getMemberByNameAndProject(input.projectId, input.name);
-        if (!member) throw new TRPCError({ code: "UNAUTHORIZED", message: "名前またはパスワードが正しくありません" });
-        const ok = await bcrypt.compare(input.password, member.passwordHash);
-        if (!ok) throw new TRPCError({ code: "UNAUTHORIZED", message: "名前またはパスワードが正しくありません" });
-        const token = genToken();
-        const exp = Date.now() + 10 * 365 * 24 * 60 * 60 * 1000; // 10 years (permanent)
-        await db.createProjectSession({ token, projectId: input.projectId, memberId: member.id, role: member.role, name: member.name, isAdmin: member.isAdmin, exp });
-        const res = ctx.res as unknown as { cookie: (name: string, value: string, opts: object) => void };
-        res.cookie(PROJECT_SESSION_COOKIE, token, { httpOnly: true, sameSite: "none", secure: true, maxAge: 10 * 365 * 24 * 60 * 60 * 1000 });
-        return { success: true, name: member.name, role: member.role, isAdmin: member.isAdmin };
+      .input(z.object({ projectId: z.string() }))
+      .mutation(async () => {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Google Workspaceでログインしてください" });
       }),
 
-    // Logout from a project
+    // 互換性のため旧プロジェクトCookieを削除する。
     logout: publicProcedure
       .input(z.object({ projectId: z.string() }))
       .mutation(async ({ ctx }) => {
@@ -668,32 +678,49 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // List members for a project (for settings screen)
+    // List members for a project (Googleログイン済みのプロジェクト利用者のみ)
     listMembers: publicProcedure
       .input(z.object({ projectId: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        const hasMembers = await db.hasAnyMember(input.projectId);
+        const currentMember = await getGoogleProjectMember(ctx.user, input.projectId);
+        if (hasMembers && !currentMember) throw new TRPCError({ code: "FORBIDDEN", message: "このプロジェクトへの権限がありません" });
         const members = await db.getMembersByProject(input.projectId);
         return members.map(m => ({ id: m.id, name: m.name, email: m.email, role: m.role, isAdmin: m.isAdmin }));
       }),
 
-    // Add a member to a project
+    // Add a member to a project (メールアドレスをGoogle Workspaceアカウントと照合)
     addMember: publicProcedure
-      .input(z.object({ projectId: z.string(), name: z.string(), password: z.string(), role: z.enum(["viewer", "editor"]), isAdmin: z.boolean().optional() }))
-      .mutation(async ({ input }) => {
-        const existing = await db.getMemberByNameAndProject(input.projectId, input.name);
-        if (existing) throw new TRPCError({ code: "CONFLICT", message: "同じ名前のメンバーがすでに存在します" });
-        const passwordHash = await bcrypt.hash(input.password, 10);
-        await db.createProjectMember({ projectId: input.projectId, name: input.name, passwordHash, role: input.role, isAdmin: input.isAdmin ?? false });
+      .input(z.object({ projectId: z.string(), name: z.string().min(1), email: z.string().email(), role: z.enum(["viewer", "editor"]), isAdmin: z.boolean().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const normalizedEmail = input.email.toLowerCase();
+        if (!normalizedEmail.endsWith("@b-bloom.jp")) throw new TRPCError({ code: "BAD_REQUEST", message: "@b-bloom.jp のメールアドレスを指定してください" });
+        const hasMembers = await db.hasAnyMember(input.projectId);
+        await assertGoogleProjectAdmin(ctx.user, input.projectId);
+        if (!hasMembers && ctx.user?.email?.toLowerCase() !== normalizedEmail) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "最初の管理者には、ログイン中のGoogle Workspaceメールアドレスを登録してください" });
+        }
+        const existing = await db.getMemberByEmailAndProject(input.projectId, normalizedEmail);
+        if (existing) throw new TRPCError({ code: "CONFLICT", message: "このメールアドレスはすでにメンバーです" });
+        await db.createProjectMember({
+          projectId: input.projectId,
+          name: input.name.trim(),
+          email: normalizedEmail,
+          // DB互換性のため保存するが、Googleログインでは使用しない。
+          passwordHash: "google-workspace-auth",
+          role: input.role,
+          isAdmin: hasMembers ? (input.isAdmin ?? false) : true,
+        });
         return { success: true };
       }),
 
-    // Update a member's role or password
+    // Update a member's project role
     updateMember: publicProcedure
-      .input(z.object({ id: z.number(), role: z.enum(["viewer", "editor"]).optional(), password: z.string().optional(), isAdmin: z.boolean().optional() }))
-      .mutation(async ({ input }) => {
-        const update: { role?: "viewer" | "editor"; passwordHash?: string; isAdmin?: boolean } = {};
+      .input(z.object({ projectId: z.string(), id: z.number(), role: z.enum(["viewer", "editor"]).optional(), isAdmin: z.boolean().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        await assertGoogleProjectAdmin(ctx.user, input.projectId);
+        const update: { role?: "viewer" | "editor"; isAdmin?: boolean } = {};
         if (input.role) update.role = input.role;
-        if (input.password) update.passwordHash = await bcrypt.hash(input.password, 10);
         if (input.isAdmin !== undefined) update.isAdmin = input.isAdmin;
         await db.updateProjectMember(input.id, update);
         return { success: true };
@@ -701,8 +728,9 @@ export const appRouter = router({
 
     // Remove a member from a project
     removeMember: publicProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .input(z.object({ projectId: z.string(), id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        await assertGoogleProjectAdmin(ctx.user, input.projectId);
         await db.deleteProjectMember(input.id);
         return { success: true };
       }),
@@ -719,42 +747,32 @@ export const appRouter = router({
         inviterName: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        // Check caller is admin
-        const session = await getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
-        const hasMembers = await db.hasAnyMember(input.projectId);
-        if (hasMembers && (!session || !session.isAdmin)) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "招待は管理者のみ実行できます" });
-        }
-
-        // Check if already a member
-        const existingMember = await db.getMemberByEmailAndProject(input.projectId, input.email);
+        const normalizedEmail = input.email.toLowerCase();
+        if (!normalizedEmail.endsWith("@b-bloom.jp")) throw new TRPCError({ code: "BAD_REQUEST", message: "@b-bloom.jp のメールアドレスを指定してください" });
+        const inviter = await assertGoogleProjectAdmin(ctx.user, input.projectId);
+        const existingMember = await db.getMemberByEmailAndProject(input.projectId, normalizedEmail);
         if (existingMember) throw new TRPCError({ code: "CONFLICT", message: "このメールアドレスはすでにメンバーです" });
 
-        // Get project name
         const projects = await db.getAllProjects();
         const project = projects.find(p => p.id === input.projectId);
         const projectName = project?.name ?? "プロジェクト";
-
-        // Create invitation token (72h expiry)
         const token = randomUUID();
         const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
         await db.createInvitation({
           projectId: input.projectId,
-          email: input.email,
+          email: normalizedEmail,
           token,
           role: input.role,
           isAdmin: input.isAdmin ?? false,
           status: "pending",
-          invitedBy: session?.memberId ?? null,
+          invitedBy: inviter?.id ?? null,
           expiresAt,
         });
 
-        // Send email
         const baseUrl = process.env.APP_URL || `http://localhost:${process.env.PORT || 3100}`;
         const inviteUrl = `${baseUrl}/invite/${token}`;
-        const inviterName = input.inviterName || session?.name || "管理者";
-        const sent = await sendInvitationEmail({ to: input.email, projectName, inviteUrl, inviterName });
-
+        const inviterName = input.inviterName || inviter?.name || ctx.user?.name || "管理者";
+        const sent = await sendInvitationEmail({ to: normalizedEmail, projectName, inviteUrl, inviterName });
         return { success: true, emailSent: sent, inviteUrl };
       }),
 
@@ -781,13 +799,9 @@ export const appRouter = router({
         };
       }),
 
-    // Accept invitation (register with name + password)
+    // Accept invitation after the recipient has authenticated with Google Workspace.
     acceptInvite: publicProcedure
-      .input(z.object({
-        token: z.string(),
-        name: z.string().min(1),
-        password: z.string().min(6),
-      }))
+      .input(z.object({ token: z.string() }))
       .mutation(async ({ input, ctx }) => {
         const inv = await db.getInvitationByToken(input.token);
         if (!inv) throw new TRPCError({ code: "NOT_FOUND", message: "招待が見つかりません" });
@@ -796,48 +810,29 @@ export const appRouter = router({
           await db.updateInvitation(inv.id, { status: "expired" });
           throw new TRPCError({ code: "BAD_REQUEST", message: "招待リンクの有効期限が切れています" });
         }
-
-        // Check name uniqueness
-        const existingName = await db.getMemberByNameAndProject(inv.projectId, input.name);
-        if (existingName) throw new TRPCError({ code: "CONFLICT", message: "この名前はすでに使用されています" });
-
-        // Create member
-        const passwordHash = await bcrypt.hash(input.password, 10);
+        const signedInEmail = ctx.user?.email?.toLowerCase();
+        if (!signedInEmail || signedInEmail !== inv.email.toLowerCase()) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "招待先のGoogle Workspaceアカウントでログインしてください" });
+        }
+        const existing = await db.getMemberByEmailAndProject(inv.projectId, signedInEmail);
+        if (existing) throw new TRPCError({ code: "CONFLICT", message: "このメールアドレスはすでにメンバーです" });
         await db.createProjectMember({
           projectId: inv.projectId,
-          name: input.name,
-          email: inv.email,
-          passwordHash,
+          name: ctx.user?.name || signedInEmail.split("@")[0],
+          email: signedInEmail,
+          passwordHash: "google-workspace-auth",
           role: inv.role,
           isAdmin: inv.isAdmin,
         });
-
-        // Mark invitation as accepted
         await db.updateInvitation(inv.id, { status: "accepted" });
-
-        // Auto-login
-        const token = genToken();
-        const exp = Date.now() + 7 * 24 * 60 * 60 * 1000;
-        const members = await db.getMembersByProject(inv.projectId);
-        const newMember = members.find(m => m.name === input.name);
-        if (newMember) {
-          projectSessions.set(token, { projectId: inv.projectId, memberId: newMember.id, role: newMember.role, name: newMember.name, isAdmin: newMember.isAdmin, exp });
-          const res = ctx.res as unknown as { cookie: (name: string, value: string, opts: object) => void };
-          res.cookie(PROJECT_SESSION_COOKIE, token, { httpOnly: true, sameSite: "none", secure: true, maxAge: 10 * 365 * 24 * 60 * 60 * 1000 });
-        }
-
-        return { success: true, projectId: inv.projectId, name: input.name, role: inv.role, isAdmin: inv.isAdmin };
+        return { success: true, projectId: inv.projectId, name: ctx.user?.name || signedInEmail, role: inv.role, isAdmin: inv.isAdmin };
       }),
 
     // List invitations for a project
     listInvitations: publicProcedure
       .input(z.object({ projectId: z.string() }))
       .query(async ({ input, ctx }) => {
-        const session = await getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
-        const hasMembers = await db.hasAnyMember(input.projectId);
-        if (hasMembers && (!session || !session.isAdmin)) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "管理者のみ閲覧できます" });
-        }
+        await assertGoogleProjectAdmin(ctx.user, input.projectId);
         const invs = await db.getInvitationsByProject(input.projectId);
         return invs.map(i => ({ id: i.id, email: i.email, role: i.role, isAdmin: i.isAdmin, status: i.status, expiresAt: i.expiresAt }));
       }),
@@ -846,11 +841,7 @@ export const appRouter = router({
     revokeInvite: publicProcedure
       .input(z.object({ id: z.number(), projectId: z.string() }))
       .mutation(async ({ input, ctx }) => {
-        const session = await getProjectSession(ctx.req as unknown as { cookies?: Record<string, string> }, input.projectId);
-        const hasMembers = await db.hasAnyMember(input.projectId);
-        if (hasMembers && (!session || !session.isAdmin)) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "管理者のみ実行できます" });
-        }
+        await assertGoogleProjectAdmin(ctx.user, input.projectId);
         await db.deleteInvitation(input.id);
         return { success: true };
       }),

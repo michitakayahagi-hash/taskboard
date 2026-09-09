@@ -8,7 +8,8 @@ const t = initTRPC.context<TrpcContext>().create({
 });
 
 export const router = t.router;
-export const publicProcedure = t.procedure;
+// ログイン状態確認・ログアウトなど、認証前にも必要なエンドポイントだけで使用する。
+export const unprotectedProcedure = t.procedure;
 
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
@@ -26,6 +27,8 @@ const requireUser = t.middleware(async opts => {
 });
 
 export const protectedProcedure = t.procedure.use(requireUser);
+// 既存のアプリ機能はすべてGoogle Workspaceログインを必須にする。
+export const publicProcedure = protectedProcedure;
 
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
