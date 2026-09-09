@@ -1,6 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { clearGoogleSession } from "./_core/googleAuth";
+import { disableGeminiSync, getGeminiSyncStatus, triggerGeminiSync } from "./_core/geminiSync";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, unprotectedProcedure } from "./_core/trpc";
 import { z } from "zod";
@@ -628,6 +629,29 @@ export const appRouter = router({
         await db.setSetting(input.key, input.value);
         return { success: true };
       }),
+  }),
+
+  // ─── Gemini meeting notes sync ───────────────────────────────────────
+  geminiSync: router({
+    status: publicProcedure.query(async ({ ctx }) => {
+      const email = ctx.user?.email?.toLowerCase();
+      if (!email) throw new TRPCError({ code: "UNAUTHORIZED", message: "Google Workspaceでログインしてください" });
+      return getGeminiSyncStatus(email);
+    }),
+    syncNow: publicProcedure.mutation(async ({ ctx }) => {
+      const email = ctx.user?.email?.toLowerCase();
+      if (!email) throw new TRPCError({ code: "UNAUTHORIZED", message: "Google Workspaceでログインしてください" });
+      try {
+        return await triggerGeminiSync(email);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Geminiメモの同期に失敗しました" });
+      }
+    }),
+    disable: publicProcedure.mutation(async ({ ctx }) => {
+      const email = ctx.user?.email?.toLowerCase();
+      if (!email) throw new TRPCError({ code: "UNAUTHORIZED", message: "Google Workspaceでログインしてください" });
+      return disableGeminiSync(email);
+    }),
   }),
 
   // ─── Project Access Control ──────────────────────────────────────────

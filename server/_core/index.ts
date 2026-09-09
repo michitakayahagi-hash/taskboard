@@ -6,6 +6,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerGoogleAuthRoutes } from "./googleAuth";
+import { registerGeminiSyncRoutes, renewGeminiSyncWatches } from "./geminiSync";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -147,6 +148,41 @@ async function runMigrations() {
   } catch (err) {
     console.error("[DB] due_history table error:", err);
   }
+  // Geminiメモ同期の接続情報・重複取込防止情報を保持する。
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    await conn.execute(`CREATE TABLE IF NOT EXISTS gemini_sync_connections (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      ownerEmail VARCHAR(320) NOT NULL UNIQUE,
+      encryptedRefreshToken TEXT NOT NULL,
+      pageToken TEXT NOT NULL,
+      channelId VARCHAR(64),
+      channelResourceId VARCHAR(255),
+      channelToken VARCHAR(128),
+      channelExpiresAt BIGINT,
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      lastSyncedAt DATETIME NULL,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY gemini_sync_channel_id (channelId)
+    )`);
+    await conn.execute(`CREATE TABLE IF NOT EXISTS gemini_imported_items (
+      importKey CHAR(64) NOT NULL PRIMARY KEY,
+      sourceFileId VARCHAR(128) NOT NULL,
+      sourceDocTitle VARCHAR(500),
+      sourceUrl TEXT,
+      taskId VARCHAR(100) NOT NULL,
+      sourceText TEXT NOT NULL,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX gemini_import_source_file (sourceFileId),
+      INDEX gemini_import_task (taskId)
+    )`);
+    console.log("[DB] gemini sync tables ensured");
+    await conn.end();
+  } catch (err) {
+    console.error("[DB] gemini sync tables error:", err);
+  }
 }
 
 async function trimDoneTasksOnStartup() {
@@ -213,6 +249,7 @@ async function startServer() {
   // Legacy OAuth callback and Google Workspace OAuth routes
   registerOAuthRoutes(app);
   registerGoogleAuthRoutes(app);
+  registerGeminiSyncRoutes(app);
   // Google Chat Webhook プロキシ
   app.post("/api/gchat-send", async (req, res) => {
     const { webhookUrl, text } = req.body as { webhookUrl: string; text: string };
@@ -392,6 +429,13 @@ async function sendOverdueNotifications() {
   }
 }
 
+function scheduleGeminiSyncWatchRenewal() {
+  // Google Driveの変更通知は最大7日で失効するため、毎日安全に更新する。
+  void renewGeminiSyncWatches();
+  setInterval(() => { void renewGeminiSyncWatches(); }, 24 * 60 * 60 * 1000);
+  console.log("[GeminiSync] Drive通知の更新スケジュールを開始しました");
+}
+
 function scheduleOverdueNotifications() {
   const now = new Date();
   // 日本時間9:00 = UTC 0:00
@@ -408,4 +452,5 @@ function scheduleOverdueNotifications() {
 
 startServer().then(() => {
   scheduleOverdueNotifications();
+  scheduleGeminiSyncWatchRenewal();
 }).catch(console.error);

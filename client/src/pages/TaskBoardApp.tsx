@@ -1346,6 +1346,21 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
   const [nameVal, setNameVal] = useState("");
   const [search, setSearch] = useState("");
   const filtered = projects.filter((p) => p.name.includes(search));
+  const geminiSyncStatus = trpc.geminiSync.status.useQuery();
+  const geminiSyncNow = trpc.geminiSync.syncNow.useMutation({
+    onSuccess: (result) => {
+      geminiSyncStatus.refetch();
+      alert(result.imported > 0 ? `Geminiメモから${result.imported}件を確認待ちに追加しました。` : "新しく取り込めるGeminiメモはありません。\n会議後に作成されたメモは自動で取り込まれます。");
+    },
+    onError: (error) => alert(`Geminiメモの同期に失敗しました: ${error.message}`),
+  });
+  const stopGeminiSync = trpc.geminiSync.disable.useMutation({
+    onSuccess: () => geminiSyncStatus.refetch(),
+    onError: (error) => alert(`Geminiメモ連携の停止に失敗しました: ${error.message}`),
+  });
+  const startGeminiSync = () => {
+    window.location.href = "/api/gemini-sync/login?next=/?geminiSync=connected";
+  };
   return (
     <div style={{ minHeight: "100vh", background: "#f8f7ff", fontFamily: "'Noto Sans JP',sans-serif" }}>
       <div style={{ background: "#fff", borderBottom: "1px solid #e0e7ff", padding: "0 28px", height: 54, display: "flex", alignItems: "center", gap: 16, position: "sticky", top: 0, zIndex: 100 }}>
@@ -1357,6 +1372,8 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
         <div style={{ flex: 1 }} />
         <button onClick={onOpenRoadmap} title="ロードマップ" style={{ background: "#fff", color: "#6366f1", border: "1.5px solid #6366f1", borderRadius: 10, padding: "8px 14px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", transition: "background .15s" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}>📅 ロードマップ</button>
+        {!geminiSyncStatus.isLoading && !geminiSyncStatus.data?.connected && <button onClick={startGeminiSync} title="Google DriveのGeminiによるメモを確認待ちタスクへ自動取込" style={{ background: "linear-gradient(135deg,#2563eb,#7c3aed)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 14px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", boxShadow: "0 4px 14px rgba(124,58,237,.24)" }}>✨ Geminiメモ連携</button>}
+        {!geminiSyncStatus.isLoading && geminiSyncStatus.data?.connected && <button onClick={() => geminiSyncNow.mutate()} disabled={geminiSyncNow.isPending} title="Google Drive上の新しいGeminiメモを今すぐ確認" style={{ background: "#f0fdf4", color: "#15803d", border: "1.5px solid #86efac", borderRadius: 10, padding: "8px 14px", fontSize: 12, cursor: geminiSyncNow.isPending ? "wait" : "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", opacity: geminiSyncNow.isPending ? .65 : 1 }}>{geminiSyncNow.isPending ? "同期中..." : "✓ Geminiメモ連携中"}</button>}
         <button onClick={onShowAssigneeView} title="担当者ダッシュボード" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", boxShadow: "0 4px 14px rgba(99,102,241,.4)", transition: "opacity .15s, transform .15s" }}
           onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; e.currentTarget.style.transform = "translateY(-1px)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = ""; }}>👥 担当者ダッシュボード</button>
@@ -1378,6 +1395,7 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
               onFocus={(e) => (e.target.style.borderColor = "#6366f1")} onBlur={(e) => (e.target.style.borderColor = "#e0e7ff")} />
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            {geminiSyncStatus.data?.connected && <button onClick={() => { if (window.confirm("Geminiメモの自動取込を停止しますか？\nすでに取り込んだ確認待ちタスクは削除されません。")) stopGeminiSync.mutate(); }} style={{ background: "#fff", color: "#64748b", border: "1.5px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap" }}>Gemini連携を停止</button>}
             <button onClick={onImport} style={{ background: "#fff", color: "#6366f1", border: "1.5px solid #6366f1", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", transition: "background .15s" }}
               onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}>Jootoインポート</button>
             <button onClick={onAdd} style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 14px rgba(99,102,241,.35)", fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap" }}>＋ 新規プロジェクト</button>
