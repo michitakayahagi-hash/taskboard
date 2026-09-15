@@ -429,6 +429,180 @@ async function sendOverdueNotifications() {
   }
 }
 
+// ─── 期限前日・当日の未完了タスクをGoogle Chatに通知 ─────────────────────────
+type DueNotificationKind = "tomorrow" | "today";
+
+type DueNotificationItem = {
+  id: string;
+  title: string;
+  assignee: string;
+  projectId: string;
+  projectName: string;
+  colTitle: string;
+  isSubtask: boolean;
+  parentTitle?: string;
+  targetDate: string;
+};
+
+const APP_BASE_URL = "https://proactive-caring-production-1be5.up.railway.app";
+
+function getJstDate(offsetDays = 0) {
+  const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  jst.setUTCDate(jst.getUTCDate() + offsetDays);
+  return jst.toISOString().slice(0, 10);
+}
+
+function formatAssignee(assignee?: string | null) {
+  const names = (assignee || "").split(",").map((name) => name.trim()).filter(Boolean);
+  return names.length > 0 ? names.join(" & ") : "担当未設定";
+}
+
+function parseSubtasks(value: unknown): Array<{ id?: number | string; text?: string; done?: boolean; assignee?: string; due?: string; dueStart?: string }> {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function sendDueNotifications(kind: DueNotificationKind) {
+  if (!process.env.DATABASE_URL) return;
+  const targetDate = getJstDate(kind === "tomorrow" ? 1 : 0);
+  const label = kind === "tomorrow" ? "明日までのタスク" : "本日までのタスク";
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    const [doneColumns] = await conn.execute("SELECT id FROM `columns` WHERE title = '完了'") as any[];
+    const doneColIds: string[] = doneColumns.map((column: any) => column.id);
+    const doneExclude = doneColIds.length > 0 ? ` AND t.colId NOT IN (${doneColIds.map(() => "?").join(",")})` : "";
+
+    // 親タスクが完了カラムにあるものは、小タスクを含めてすべて通知対象外にする。
+    const taskQuery = `SELECT t.id, t.title, t.assignee, t.due, t.subtasks, t.projectId, c.title AS colTitle, p.name AS projectName
+      FROM tasks t
+      LEFT JOIN \`columns\` c ON t.colId = c.id
+      LEFT JOIN projects p ON t.projectId = p.id
+      WHERE (t.due = ? OR t.subtasks IS NOT NULL)${doneExclude}`;
+    const [rows] = await conn.execute(taskQuery, [targetDate, ...doneColIds]) as any[];
+
+    const itemsByProject: Record<string, DueNotificationItem[]> = {};
+    for (const task of rows) {
+      const projectId = task.projectId;
+      if (!projectId) continue;
+      const add = (item: DueNotificationItem) => {
+        if (!itemsByProject[projectId]) itemsByProject[projectId] = [];
+        itemsByProject[projectId].push(item);
+      };
+      if (task.due === targetDate) {
+        add({
+          id: task.id,
+          title: task.title,
+          assignee: task.assignee || "",
+          projectId,
+          projectName: task.projectName || projectId,
+          colTitle: task.colTitle || "未分類",
+          isSubtask: false,
+          targetDate,
+        });
+      }
+      // 小タスクはdone=falseかつ終了日（due）が対象日のものだけを通知する。
+      for (const subtask of parseSubtasks(task.subtasks)) {
+        if (subtask.done || subtask.due !== targetDate || !subtask.text?.trim()) continue;
+        add({
+          id: task.id,
+          title: subtask.text.trim(),
+          assignee: subtask.assignee || task.assignee || "",
+          projectId,
+          projectName: task.projectName || projectId,
+          colTitle: task.colTitle || "未分類",
+          isSubtask: true,
+          parentTitle: task.title,
+          targetDate,
+        });
+      }
+    }
+
+    const projectIds = Object.keys(itemsByProject);
+    let totalSent = 0;
+    for (const projectId of projectIds) {
+      const [settingsRows] = await conn.execute(
+        "SELECT value FROM settings WHERE `settingKey` = ?",
+        [`webhook_url_${projectId}`],
+      ) as any[];
+      const webhookUrl = settingsRows[0]?.value;
+      if (!webhookUrl) continue;
+
+      const items = itemsByProject[projectId];
+      const projectName = items[0]?.projectName || projectId;
+      const mainTasks = items.filter((item) => !item.isSubtask);
+      const subtasks = items.filter((item) => item.isSubtask);
+      const lines = [
+        kind === "tomorrow" ? "📅 *明日までのタスク*" : "⏰ *本日までのタスク*",
+        `📁 *${projectName}*`,
+        `期限：${targetDate.replace(/-/g, "/")}`,
+        "",
+      ];
+      if (mainTasks.length > 0) {
+        lines.push(`📋 *タスク（${mainTasks.length}件）*`);
+        for (const item of mainTasks) {
+          const taskUrl = `${APP_BASE_URL}/?project=${item.projectId}&task=${item.id}`;
+          lines.push(`• <${taskUrl}|${item.title}> ｜ 👤 ${formatAssignee(item.assignee)} ｜ 🗂 ${item.colTitle}`);
+        }
+        lines.push("");
+      }
+      if (subtasks.length > 0) {
+        lines.push(`☑️ *小タスク（${subtasks.length}件）*`);
+        for (const item of subtasks) {
+          const taskUrl = `${APP_BASE_URL}/?project=${item.projectId}&task=${item.id}`;
+          lines.push(`• <${taskUrl}|${item.title}>`);
+          lines.push(`  親タスク：${item.parentTitle} ｜ 👤 ${formatAssignee(item.assignee)} ｜ 🗂 ${item.colTitle}`);
+        }
+        lines.push("");
+      }
+      lines.push("完了した項目は、次回以降の通知から自動で除外されます。");
+
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: lines.join("\n") }),
+      });
+      if (response.ok) totalSent += items.length;
+      else console.error(`[DueNotify] ${projectName} への通知に失敗しました:`, response.status);
+    }
+    console.log(`[DueNotify] ${kind}：${totalSent}件を通知しました（対象日 ${targetDate}）`);
+    await conn.end();
+  } catch (error) {
+    console.error(`[DueNotify] ${kind} 通知エラー:`, error);
+  }
+}
+
+function scheduleJstDaily(hour: number, minute: number, jobName: string, job: () => Promise<void>) {
+  const scheduleNext = () => {
+    const now = new Date();
+    // JSTの予定時刻をUTC日時として作成する（JST = UTC+9）。
+    const target = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    target.setUTCHours(hour, minute, 0, 0);
+    let delay = target.getTime() - (now.getTime() + 9 * 60 * 60 * 1000);
+    if (delay <= 0) delay += 24 * 60 * 60 * 1000;
+    setTimeout(async () => {
+      await job();
+      scheduleNext();
+    }, delay);
+    console.log(`[DueNotify] ${jobName}：次回 ${new Date(now.getTime() + delay).toISOString()}（JST ${hour}:${String(minute).padStart(2, "0")}）`);
+  };
+  scheduleNext();
+}
+
+function scheduleDueNotifications() {
+  // 前日は朝9時に1回、当日は10時・13時・15時に未完了項目を再抽出して送る。
+  scheduleJstDaily(9, 0, "明日までのタスク通知", () => sendDueNotifications("tomorrow"));
+  scheduleJstDaily(10, 0, "本日までのタスク通知", () => sendDueNotifications("today"));
+  scheduleJstDaily(13, 0, "本日までのタスク通知", () => sendDueNotifications("today"));
+  scheduleJstDaily(15, 0, "本日までのタスク通知", () => sendDueNotifications("today"));
+}
+
 function scheduleGeminiSyncWatchRenewal() {
   // Google Driveの変更通知は最大7日で失効するため、毎日安全に更新する。
   void renewGeminiSyncWatches();
@@ -452,5 +626,6 @@ function scheduleOverdueNotifications() {
 
 startServer().then(() => {
   scheduleOverdueNotifications();
+  scheduleDueNotifications();
   scheduleGeminiSyncWatchRenewal();
 }).catch(console.error);
