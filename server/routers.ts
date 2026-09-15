@@ -27,9 +27,39 @@ async function getProjectSession(req: { cookies?: Record<string, string> }, proj
   return session;
 }
 
-async function getGoogleProjectMember(user: { email?: string | null } | null, projectId: string) {
+function getTaskBoardSuperAdminEmails() {
+  return (process.env.TASKBOARD_SUPERADMIN_EMAILS || "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isTaskBoardSuperAdmin(email?: string | null) {
+  return !!email && getTaskBoardSuperAdminEmails().includes(email.trim().toLowerCase());
+}
+
+async function getGoogleProjectMember(user: { email?: string | null; name?: string | null } | null, projectId: string) {
   if (!user?.email) return null;
-  return db.getMemberByEmailAndProject(projectId, user.email.toLowerCase());
+  const email = user.email.toLowerCase();
+  const existingMember = await db.getMemberByEmailAndProject(projectId, email);
+  if (existingMember) return existingMember;
+
+  // 旧パスワード設定済みプロジェクトではメール未登録の既存メンバーがいる。
+  // TASKBOARD_SUPERADMIN_EMAILSに明示登録された管理者だけを、管理者として自動移行する。
+  // これにより、同じ@b-bloom.jpドメインの登録外ユーザーは絶対に許可されない。
+  if (!isTaskBoardSuperAdmin(email)) return null;
+  const project = await db.getProjectById(projectId);
+  if (!project) return null;
+
+  await db.createProjectMember({
+    projectId,
+    name: user.name?.trim() || email.split("@")[0],
+    email,
+    passwordHash: "google-workspace-superadmin",
+    role: "editor",
+    isAdmin: true,
+  });
+  return db.getMemberByEmailAndProject(projectId, email);
 }
 
 async function assertGoogleProjectAdmin(user: { email?: string | null } | null, projectId: string) {
