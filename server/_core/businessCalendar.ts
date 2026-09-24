@@ -1,4 +1,4 @@
-import * as holidayJp from "@holiday-jp/holiday_jp";
+import holidayJp from "@holiday-jp/holiday_jp";
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
