@@ -281,6 +281,12 @@ async function startServer() {
     }
   });
 
+  // 外部監視用。認証・DBアクセス・静的アセット配信を伴わず、プロセスの応答性だけを確認する。
+  app.get("/health", (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ ok: true, service: "taskboard" });
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",
