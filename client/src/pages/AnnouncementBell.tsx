@@ -9,6 +9,18 @@ import { createPortal } from "react-dom";
 // ─── お知らせデータ（新機能追加時にここに追記する） ───────────────────────
 export const ANNOUNCEMENTS: { id: string; date: string; title: string; body: string }[] = [
   {
+    id: "2026-09-28-uptime-monitor",
+    date: "2026/09/28",
+    title: "🚨 アプリの稼働監視を追加しました",
+    body: "アプリが応答しなくなった場合に備え、5分間隔の自動稼働監視を導入しました。異常を検知したときと、復旧したタイミングで、担当のGoogle Chatスペースへ自動通知されます。\n\n詳細資料：[機能説明スライドを開く](https://files.manuscdn.com/user_upload_by_module/session_file/310519663307910496/wqpSsaEGXNSOdyGo.pdf)",
+  },
+  {
+    id: "2026-09-28-due-change-approval",
+    date: "2026/09/28",
+    title: "📅 期日変更が承認制になりました",
+    body: "タスクの期日を何度も変更する場合、管理者の確認が必要になります。初回設定・1回目の変更は今まで通り即時反映されますが、2回目以降の変更は「承認待ち」となり、一覧から管理者が承認・却下できるようになりました。\n\n詳細資料：[機能説明スライドを開く](https://files.manuscdn.com/user_upload_by_module/session_file/310519663307910496/wqpSsaEGXNSOdyGo.pdf)",
+  },
+  {
     id: "2026-06-22-creator-required",
     date: "2026/06/22",
     title: "👤 作成者が必須入力になりました",
