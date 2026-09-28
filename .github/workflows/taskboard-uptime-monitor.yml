@@ -1,0 +1,69 @@
+name: TaskBoard Uptime Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      HEALTH_URL: https://proactive-caring-production-1be5.up.railway.app/health
+      APP_URL: https://proactive-caring-production-1be5.up.railway.app/
+      WEBHOOK_URL: ${{ secrets.TASKBOARD_UPTIME_GOOGLE_CHAT_WEBHOOK_URL }}
+      ISSUE_TITLE: "[TaskBoard監視] 障害検知中"
+      ISSUE_LABEL: taskboard-uptime
+    steps:
+      - name: Check TaskBoard health
+        id: health
+        shell: bash
+        run: |
+          set +e
+          body="$(mktemp)"
+          curl --silent --show-error --max-time 20 --fail --output "$body" "$HEALTH_URL"
+          curl_status=$?
+          if [ "$curl_status" -eq 0 ] && grep -q '"ok":true' "$body"; then
+            echo "state=up" >> "$GITHUB_OUTPUT"
+            echo "detail=正常応答を確認しました" >> "$GITHUB_OUTPUT"
+          else
+            echo "state=down" >> "$GITHUB_OUTPUT"
+            echo "detail=HTTP確認に失敗しました（curl exit: $curl_status）" >> "$GITHUB_OUTPUT"
+          fi
+          rm -f "$body"
+
+      - name: Notify only on outage or recovery
+        env:
+          CURRENT_STATE: ${{ steps.health.outputs.state }}
+          DETAIL: ${{ steps.health.outputs.detail }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${WEBHOOK_URL:-}" ]; then
+            echo "Google Chat webhook secret is not configured" >&2
+            exit 1
+          fi
+
+          issue_number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label "$ISSUE_LABEL" --search "in:title $ISSUE_TITLE" --json number --jq '.[0].number // empty')"
+          send_chat() {
+            local text="$1"
+            jq -n --arg text "$text" '{text: $text}' | curl --silent --show-error --fail-with-body --max-time 20 \
+              -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d @-
+          }
+
+          if [ "$CURRENT_STATE" = "down" ] && [ -z "$issue_number" ]; then
+            send_chat $'🚨 *TaskBoardの応答を確認できません*\n対象: '"$APP_URL"$'\n検知内容: '"$DETAIL"$'\n5分ごとに再確認しています。復旧時にも通知します。'
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --label "$ISSUE_LABEL" \
+              --body "監視が $(date -u '+%Y-%m-%d %H:%M UTC') に異常を検知しました。対象: $APP_URL"
+          elif [ "$CURRENT_STATE" = "up" ] && [ -n "$issue_number" ]; then
+            send_chat $'✅ *TaskBoardが復旧しました*\n対象: '"$APP_URL"$'\n5分間隔の外部監視で正常応答を確認しました。'
+            gh issue close "$issue_number" --repo "$GITHUB_REPOSITORY" --comment "復旧を確認しました。$(date -u '+%Y-%m-%d %H:%M UTC')"
+          else
+            echo "No notification required: $CURRENT_STATE"
+          fi
