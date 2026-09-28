@@ -201,8 +201,32 @@ export const dueHistory = mysqlTable("due_history", {
   taskId: varchar("taskId", { length: 64 }).notNull(),
   prevDue: varchar("prevDue", { length: 20 }),
   newDue: varchar("newDue", { length: 20 }),
+  prevDueStart: varchar("prevDueStart", { length: 20 }),
+  newDueStart: varchar("newDueStart", { length: 20 }),
   changedBy: varchar("changedBy", { length: 100 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type DueHistory = typeof dueHistory.$inferSelect;
 export type InsertDueHistory = typeof dueHistory.$inferInsert;
+
+/**
+ * Deadline change requests
+ * - 1回目の期日変更後、以降の変更案は矢作充隆さんの承認待ちとして保持する
+ */
+export const dueChangeRequests = mysqlTable("due_change_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: varchar("taskId", { length: 64 }).notNull(),
+  prevDue: varchar("prevDue", { length: 20 }),
+  prevDueStart: varchar("prevDueStart", { length: 20 }),
+  requestedDue: varchar("requestedDue", { length: 20 }),
+  requestedDueStart: varchar("requestedDueStart", { length: 20 }),
+  requesterEmail: varchar("requesterEmail", { length: 320 }).notNull(),
+  requesterName: varchar("requesterName", { length: 100 }).notNull(),
+  status: mysqlEnum("status", ["pending", "approved", "rejected"]).notNull().default("pending"),
+  approverEmail: varchar("approverEmail", { length: 320 }),
+  approverName: varchar("approverName", { length: 100 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  decidedAt: timestamp("decidedAt"),
+});
+export type DueChangeRequest = typeof dueChangeRequests.$inferSelect;
+export type InsertDueChangeRequest = typeof dueChangeRequests.$inferInsert;

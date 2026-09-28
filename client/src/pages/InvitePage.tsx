@@ -29,7 +29,7 @@ export function InvitePage({ token }: { token: string }) {
   const meQuery = trpc.auth.me.useQuery();
   const inviteQuery = trpc.projectAccess.getInvite.useQuery(
     { token },
-    { retry: false, onError: (e) => setError(e.message) }
+    { retry: false }
   );
   const acceptMut = trpc.projectAccess.acceptInvite.useMutation({
     onSuccess: (data) => { setProjectId(data.projectId); setDone(true); },
@@ -52,7 +52,7 @@ export function InvitePage({ token }: { token: string }) {
   if (inviteQuery.isError || !inviteQuery.data) {
     return <div style={S.page}><div style={S.card}>
       <h2 style={{ color: "#ef4444", fontSize: 18, margin: "0 0 12px" }}>無効な招待リンク</h2>
-      <p style={{ color: "#64748b", fontSize: 13 }}>{error || "この招待リンクは無効か期限切れです。管理者に再度招待を依頼してください。"}</p>
+      <p style={{ color: "#64748b", fontSize: 13 }}>{error || inviteQuery.error?.message || "この招待リンクは無効か期限切れです。管理者に再度招待を依頼してください。"}</p>
     </div></div>;
   }
 

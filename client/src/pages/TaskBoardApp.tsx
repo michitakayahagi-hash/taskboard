@@ -62,7 +62,7 @@ interface TaskType {
   id: string; colId: string; sortOrder: number; title: string; assignee: string;
   priority: string; due: string | null; tags: string[]; subtasks: Subtask[];
   description: string | null; prevCol?: string | null; projectId: string;
-  createdBy?: string | null; createdAt?: string | Date | null;
+  createdBy?: string | null; createdAt?: string | Date | null; taskStatus?: string | null;
 }
 interface ProjectType { id: string; name: string; color: string; }
 
@@ -314,6 +314,7 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
   );
   const [tab, setTab] = useState<"subtasks" | "comments" | "attachments" | "dueHistory">("subtasks");
   const dueHistoryQuery = trpc.dueHistory.list.useQuery({ taskId: task.id }, { enabled: tab === "dueHistory" });
+  const pendingDueChangeQuery = trpc.dueChange.getPending.useQuery({ taskId: task.id });
   const [newSub, setNewSub] = useState("");
   const [editingSubId, setEditingSubId] = useState<number | null>(null);
   const [editingSubText, setEditingSubText] = useState("");
@@ -552,6 +553,12 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
               <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 13 }}>～</span>
               <CustomDatePicker value={(task as any)["due"] || ""} onChange={(v) => onUpdateField(task.id, "due", v)} style={{ flex: 1 }} placeholder="終了日" />
             </div>
+            {pendingDueChangeQuery.data?.request && (
+              <div style={{ marginTop: 7, borderRadius: 8, padding: "7px 9px", background: "#fffbeb", border: "1px solid #fcd34d", color: "#92400e", fontSize: 11, lineHeight: 1.55 }}>
+                🕒 期日変更を申請中です。矢作充隆さんの承認後に反映されます。<br />
+                変更案: {(pendingDueChangeQuery.data.request.requestedDueStart || "なし").replace(/-/g, "/")} ～ {(pendingDueChangeQuery.data.request.requestedDue || "なし").replace(/-/g, "/")}
+              </div>
+            )}
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 3 }}>担当者</label>
@@ -1338,15 +1345,72 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, onS
 }
 
 /// ─── ProjectList ────────────────────────────────────────────────────────────
-function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete, onRename, onRefresh, onDuplicate, onShowAssigneeView, onOpenRoadmap }: {
+function DueApprovalModal({ onClose, onOpenTask }: { onClose: () => void; onOpenTask: (projectId: string, taskId: string) => void }) {
+  const utils = trpc.useUtils();
+  const pendingQuery = trpc.dueChange.listPending.useQuery();
+  const approve = trpc.dueChange.approve.useMutation({
+    onSuccess: async () => {
+      await pendingQuery.refetch();
+      await utils.task.list.invalidate();
+    },
+  });
+  const reject = trpc.dueChange.reject.useMutation({
+    onSuccess: async () => {
+      await pendingQuery.refetch();
+      await utils.task.list.invalidate();
+    },
+  });
+  const format = (value?: string | null) => value ? value.replace(/-/g, "/") : "なし";
+  const requests = pendingQuery.data?.requests || [];
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,10,40,.45)", zIndex: 3000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(3px)" }} onClick={(e) => e.currentTarget === e.target && onClose()}>
+      <div style={{ width: "100%", maxWidth: 620, maxHeight: "85vh", overflow: "hidden", display: "flex", flexDirection: "column", background: "#fff", borderRadius: 18, boxShadow: "0 20px 60px rgba(30,27,75,.25)", fontFamily: "'Noto Sans JP',sans-serif" }}>
+        <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid #e0e7ff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h2 style={{ margin: 0, color: "#1e1b4b", fontSize: 17 }}>🕒 期日変更の承認待ち</h2>
+            <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 11 }}>矢作充隆さんの承認後に変更を反映します。</p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 22, lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ overflowY: "auto", padding: 16 }}>
+          {pendingQuery.isLoading && <p style={{ color: "#94a3b8", textAlign: "center", fontSize: 13 }}>読み込み中...</p>}
+          {!pendingQuery.isLoading && requests.length === 0 && <p style={{ color: "#94a3b8", textAlign: "center", fontSize: 13, padding: 22 }}>承認待ちの期日変更はありません。</p>}
+          {requests.map((request: any) => (
+            <div key={request.id} style={{ border: "1.5px solid #fde68a", background: "#fffbeb", borderRadius: 12, padding: "13px 14px", marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <button onClick={() => request.projectId && onOpenTask(request.projectId, request.taskId)} style={{ padding: 0, background: "none", border: "none", cursor: request.projectId ? "pointer" : "default", color: "#1e1b4b", fontWeight: 800, textAlign: "left", fontSize: 14, fontFamily: "inherit", textDecoration: request.projectId ? "underline" : "none" }}>{request.taskTitle}</button>
+                  <div style={{ marginTop: 3, fontSize: 11, color: "#92400e" }}>{request.projectName} ・ 申請者: {request.requesterName}</div>
+                </div>
+                <span style={{ flexShrink: 0, fontSize: 10, color: "#92400e" }}>{request.createdAt ? new Date(request.createdAt).toLocaleString("ja-JP") : ""}</span>
+              </div>
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "auto 1fr", rowGap: 4, columnGap: 8, fontSize: 12 }}>
+                <span style={{ color: "#64748b" }}>現在</span><span style={{ color: "#b91c1c", fontWeight: 700 }}>{format(request.prevDueStart)} ～ {format(request.prevDue)}</span>
+                <span style={{ color: "#64748b" }}>変更案</span><span style={{ color: "#15803d", fontWeight: 800 }}>{format(request.requestedDueStart)} ～ {format(request.requestedDue)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+                <button disabled={approve.isPending || reject.isPending} onClick={() => { if (window.confirm(`「${request.taskTitle}」の期日変更を却下しますか？`)) reject.mutate({ id: request.id }); }} style={{ border: "1.5px solid #fca5a5", background: "#fff", color: "#dc2626", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>却下</button>
+                <button disabled={approve.isPending || reject.isPending} onClick={() => { if (window.confirm(`「${request.taskTitle}」の期日を変更案どおりに反映しますか？`)) approve.mutate({ id: request.id }); }} style={{ border: "none", background: "#15803d", color: "#fff", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>承認して反映</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete, onRename, onRefresh, onDuplicate, onShowAssigneeView, onOpenRoadmap, onOpenDueApprovals }: {
   projects: ProjectType[]; taskCounts: Record<string, { total: number; done: number; dueToday: number }>;
-  onSelect: (id: string) => void; onAdd: () => void; onImport: () => void; onDelete: (id: string) => void; onRename: (id: string, name: string) => void; onRefresh: () => void; onDuplicate: (id: string) => void; onShowAssigneeView: () => void; onOpenRoadmap: () => void;
+  onSelect: (id: string) => void; onAdd: () => void; onImport: () => void; onDelete: (id: string) => void; onRename: (id: string, name: string) => void; onRefresh: () => void; onDuplicate: (id: string) => void; onShowAssigneeView: () => void; onOpenRoadmap: () => void; onOpenDueApprovals: () => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameVal, setNameVal] = useState("");
   const [search, setSearch] = useState("");
   const filtered = projects.filter((p) => p.name.includes(search));
   const geminiSyncStatus = trpc.geminiSync.status.useQuery();
+  const dueChangePending = trpc.dueChange.listPending.useQuery();
   const geminiSyncNow = trpc.geminiSync.syncNow.useMutation({
     onSuccess: (result) => {
       geminiSyncStatus.refetch();
@@ -1372,6 +1436,7 @@ function ProjectList({ projects, taskCounts, onSelect, onAdd, onImport, onDelete
         <div style={{ flex: 1 }} />
         <button onClick={onOpenRoadmap} title="ロードマップ" style={{ background: "#fff", color: "#6366f1", border: "1.5px solid #6366f1", borderRadius: 10, padding: "8px 14px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", transition: "background .15s" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#ede9fe")} onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}>📅 ロードマップ</button>
+        {dueChangePending.data?.canApprove && <button onClick={onOpenDueApprovals} title="期日変更の承認待ち" style={{ background: "#fffbeb", color: "#92400e", border: "1.5px solid #fcd34d", borderRadius: 10, padding: "8px 14px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap" }}>🕒 期日承認 {dueChangePending.data.requests.length}件</button>}
         {!geminiSyncStatus.isLoading && !geminiSyncStatus.data?.connected && <button onClick={startGeminiSync} title="Google DriveのGeminiによるメモを確認待ちタスクへ自動取込" style={{ background: "linear-gradient(135deg,#2563eb,#7c3aed)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 14px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", boxShadow: "0 4px 14px rgba(124,58,237,.24)" }}>✨ Geminiメモ連携</button>}
         {!geminiSyncStatus.isLoading && geminiSyncStatus.data?.connected && <button onClick={() => geminiSyncNow.mutate()} disabled={geminiSyncNow.isPending} title="Google Drive上の新しいGeminiメモを今すぐ確認" style={{ background: "#f0fdf4", color: "#15803d", border: "1.5px solid #86efac", borderRadius: 10, padding: "8px 14px", fontSize: 12, cursor: geminiSyncNow.isPending ? "wait" : "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", opacity: geminiSyncNow.isPending ? .65 : 1 }}>{geminiSyncNow.isPending ? "同期中..." : "✓ Geminiメモ連携中"}</button>}
         <button onClick={onShowAssigneeView} title="担当者ダッシュボード" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontFamily: "'Noto Sans JP',sans-serif", whiteSpace: "nowrap", boxShadow: "0 4px 14px rgba(99,102,241,.4)", transition: "opacity .15s, transform .15s" }}
@@ -1540,6 +1605,13 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
       if (ctx?.prev) utils.task.list.setData({ projectId: project.id }, ctx.prev);
     },
     onSettled: () => utils.task.list.invalidate({ projectId: project.id }),
+  });
+  const requestDueChange = trpc.dueChange.request.useMutation({
+    onSuccess: async (_result, variables) => {
+      await utils.task.list.invalidate({ projectId: project.id });
+      await utils.dueChange.getPending.invalidate({ taskId: variables.taskId });
+      await utils.dueChange.listPending.invalidate();
+    },
   });
   const createComment = trpc.comment.create.useMutation({ onSuccess: (_d, vars) => utils.comment.list.invalidate({ taskId: vars.taskId }) });
   const deleteTask = trpc.task.delete.useMutation({ onSuccess: () => utils.task.list.invalidate({ projectId: project.id }) });
@@ -1792,9 +1864,30 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
   };
 
   const onUpdateField = useCallback((taskId: string, field: string, value: unknown) => {
+    if (field === "due" || field === "dueStart") {
+      const requestedValue = typeof value === "string" && value ? value : null;
+      requestDueChange.mutate(
+        field === "due"
+          ? { taskId, due: requestedValue }
+          : { taskId, dueStart: requestedValue },
+        {
+          onSuccess: (result) => {
+            if (result.status === "applied") {
+              alert("初回の期日変更として反映しました。次回以降の変更は矢作充隆さんの承認後に反映されます。");
+            } else if (result.status === "pending") {
+              alert("期日変更を承認待ちとして申請しました。矢作充隆さんの承認後に反映されます。");
+            } else if (result.status === "already_pending") {
+              alert("このタスクには承認待ちの期日変更がすでにあります。承認または却下後に再申請してください。");
+            }
+          },
+          onError: (error) => alert(`期日変更の申請に失敗しました: ${error.message}`),
+        }
+      );
+      return;
+    }
     updateTask.mutate({ id: taskId, [field]: value });
     setDetailTask((prev) => prev && prev.id === taskId ? { ...prev, [field]: value } : prev);
-  }, []);
+  }, [requestDueChange, updateTask]);
 
   const onUpdateSubtasks = useCallback((taskId: string, subtasks: Subtask[]) => {
     updateTask.mutate({ id: taskId, subtasks });
@@ -1993,6 +2086,7 @@ export default function TaskBoardApp({ onOpenRoadmap, pendingProjectId, pendingT
   const [showAddProject, setShowAddProject] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showAssigneeView, setShowAssigneeView] = useState(false);
+  const [showDueApprovals, setShowDueApprovals] = useState(false);
 
   const currentProject = projects.find((p) => p.id === currentProjectId);
 
@@ -2076,7 +2170,8 @@ export default function TaskBoardApp({ onOpenRoadmap, pendingProjectId, pendingT
 
   return (
     <>
-      <ProjectList projects={projects} taskCounts={taskCounts} onSelect={setCurrentProjectId} onAdd={() => setShowAddProject(true)} onImport={() => setShowImport(true)} onDelete={handleDelete} onRename={handleRename} onRefresh={async () => { await utils.project.list.invalidate(); await utils.task.list.invalidate(); await utils.column.list.invalidate(); }} onDuplicate={handleDuplicate} onShowAssigneeView={() => setShowAssigneeView(true)} onOpenRoadmap={() => onOpenRoadmap?.()} />
+      <ProjectList projects={projects} taskCounts={taskCounts} onSelect={setCurrentProjectId} onAdd={() => setShowAddProject(true)} onImport={() => setShowImport(true)} onDelete={handleDelete} onRename={handleRename} onRefresh={async () => { await utils.project.list.invalidate(); await utils.task.list.invalidate(); await utils.column.list.invalidate(); }} onDuplicate={handleDuplicate} onShowAssigneeView={() => setShowAssigneeView(true)} onOpenRoadmap={() => onOpenRoadmap?.()} onOpenDueApprovals={() => setShowDueApprovals(true)} />
+      {showDueApprovals && <DueApprovalModal onClose={() => setShowDueApprovals(false)} onOpenTask={(projectId, taskId) => { setShowDueApprovals(false); setCurrentProjectId(projectId); setPendingOpenTaskId(taskId); }} />}
       {showAddProject && <AddProjectModal onClose={() => setShowAddProject(false)} onSave={addProject} existingCount={projects.length} />}
       {showImport && <ImportModal onClose={() => { setShowImport(false); utils.project.list.invalidate(); }} onImported={(pid: string) => { setShowImport(false); utils.project.list.invalidate(); setCurrentProjectId(pid); }} />}
     </>

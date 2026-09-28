@@ -13,6 +13,7 @@ import {
   attachments, InsertAttachment,
   subtaskTemplates, InsertSubtaskTemplate,
   dueHistory, InsertDueHistory,
+  dueChangeRequests, InsertDueChangeRequest,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -299,6 +300,78 @@ export async function getDueHistory(taskId: string) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(dueHistory).where(eq(dueHistory.taskId, taskId)).orderBy(dueHistory.createdAt);
+}
+
+// ─── Deadline change request helpers ─────────────────────────────────────────
+export async function getPendingDueChangeRequest(taskId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(dueChangeRequests)
+    .where(and(eq(dueChangeRequests.taskId, taskId), eq(dueChangeRequests.status, "pending")))
+    .limit(1);
+  return result[0] || null;
+}
+
+export async function createDueChangeRequest(data: InsertDueChangeRequest) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.insert(dueChangeRequests).values(data);
+}
+
+export async function listPendingDueChangeRequests() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(dueChangeRequests)
+    .where(eq(dueChangeRequests.status, "pending"))
+    .orderBy(asc(dueChangeRequests.createdAt));
+}
+
+export async function approveDueChangeRequest(id: number, approver: { email: string; name: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+
+  return db.transaction(async (tx) => {
+    const rows = await tx.select().from(dueChangeRequests).where(eq(dueChangeRequests.id, id)).limit(1);
+    const request = rows[0];
+    if (!request) throw new Error("Deadline change request not found");
+    if (request.status !== "pending") return { request, applied: false };
+
+    await tx.update(tasks).set({
+      due: request.requestedDue,
+      dueStart: request.requestedDueStart,
+    }).where(eq(tasks.id, request.taskId));
+    await tx.insert(dueHistory).values({
+      taskId: request.taskId,
+      prevDue: request.prevDue,
+      newDue: request.requestedDue,
+      prevDueStart: request.prevDueStart,
+      newDueStart: request.requestedDueStart,
+      changedBy: `承認: ${approver.name}`,
+    });
+    await tx.update(dueChangeRequests).set({
+      status: "approved",
+      approverEmail: approver.email,
+      approverName: approver.name,
+      decidedAt: new Date(),
+    }).where(eq(dueChangeRequests.id, id));
+    return { request, applied: true };
+  });
+}
+
+export async function rejectDueChangeRequest(id: number, approver: { email: string; name: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const rows = await db.select().from(dueChangeRequests).where(eq(dueChangeRequests.id, id)).limit(1);
+  const request = rows[0];
+  if (!request) throw new Error("Deadline change request not found");
+  if (request.status !== "pending") return { request, applied: false };
+  await db.update(dueChangeRequests).set({
+    status: "rejected",
+    approverEmail: approver.email,
+    approverName: approver.name,
+    decidedAt: new Date(),
+  }).where(eq(dueChangeRequests.id, id));
+  return { request, applied: true };
 }
 
 // ─── Comment helpers ────────────────────────────────────────────────────────

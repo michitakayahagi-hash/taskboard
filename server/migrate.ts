@@ -1,8 +1,10 @@
-import { db } from "./db.js";
+import { getDb } from "./db.js";
 import { sql } from "drizzle-orm";
 
 export async function runMigrations() {
   try {
+    const db = await getDb();
+    if (!db) throw new Error("Database is not available");
     // isPublicカラムをprojectsテーブルに追加（存在しない場合のみ）
     await db.execute(sql`
       ALTER TABLE projects ADD COLUMN IF NOT EXISTS isPublic BOOLEAN NOT NULL DEFAULT FALSE

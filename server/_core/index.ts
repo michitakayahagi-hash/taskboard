@@ -140,6 +140,8 @@ async function runMigrations() {
       taskId VARCHAR(64) NOT NULL,
       prevDue VARCHAR(20),
       newDue VARCHAR(20),
+      prevDueStart VARCHAR(20),
+      newDueStart VARCHAR(20),
       changedBy VARCHAR(100),
       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_task_id (taskId)
@@ -148,6 +150,46 @@ async function runMigrations() {
     await conn.end();
   } catch (err) {
     console.error("[DB] due_history table error:", err);
+  }
+  // 既存のdue_historyにも開始日監査列を追加する
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    await conn.execute(`ALTER TABLE due_history ADD COLUMN prevDueStart VARCHAR(20), ADD COLUMN newDueStart VARCHAR(20)`);
+    console.log("[DB] due_history start-date columns added");
+    await conn.end();
+  } catch (err: any) {
+    if (err.errno === 1060 || err.message?.includes("Duplicate column")) {
+      console.log("[DB] due_history start-date columns already exist");
+    } else {
+      console.error("[DB] due_history start-date columns error:", err.message);
+    }
+  }
+  // 2回目以降の期限変更を、承認されるまで保留する
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    await conn.execute(`CREATE TABLE IF NOT EXISTS due_change_requests (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      taskId VARCHAR(64) NOT NULL,
+      prevDue VARCHAR(20),
+      prevDueStart VARCHAR(20),
+      requestedDue VARCHAR(20),
+      requestedDueStart VARCHAR(20),
+      requesterEmail VARCHAR(320) NOT NULL,
+      requesterName VARCHAR(100) NOT NULL,
+      status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+      approverEmail VARCHAR(320),
+      approverName VARCHAR(100),
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      decidedAt DATETIME NULL,
+      INDEX idx_due_change_task_status (taskId, status),
+      INDEX idx_due_change_status_created (status, createdAt)
+    )`);
+    console.log("[DB] due_change_requests table ensured");
+    await conn.end();
+  } catch (err) {
+    console.error("[DB] due_change_requests table error:", err);
   }
   // Geminiメモ同期の接続情報・重複取込防止情報を保持する。
   try {
@@ -360,7 +402,7 @@ async function sendOverdueNotifications() {
 
     // プロジェクト別にWebhook URLを取得
     const allTasks = [...overdueTasks, ...noDueTasks];
-    const projectIds = [...new Set(allTasks.map((t: any) => t.projectId))] as string[];
+    const projectIds = Array.from(new Set(allTasks.map((t: any) => t.projectId))) as string[];
     const webhookMap: Record<string, string> = {};
     for (const pid of projectIds) {
       const [rows] = await conn.execute("SELECT value FROM settings WHERE `settingKey` = ?", [`webhook_url_${pid}`]) as any[];

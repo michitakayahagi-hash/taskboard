@@ -11,6 +11,7 @@ import { TRPCError } from "@trpc/server";
 import { randomUUID } from "crypto";
 import { sendInvitationEmail } from "./_core/mailer";
 import { storagePut } from "./storage";
+import { deadlineValuesChanged, isDueChangeApprover, normalizeDueDate } from "./_core/dueChangeApproval";
 
 // Cookie name for project-level auth sessions
 const PROJECT_SESSION_COOKIE = "tb_proj_session";
@@ -36,6 +37,47 @@ function getTaskBoardSuperAdminEmails() {
 
 function isTaskBoardSuperAdmin(email?: string | null) {
   return !!email && getTaskBoardSuperAdminEmails().includes(email.trim().toLowerCase());
+}
+
+const TASKBOARD_PUBLIC_URL = process.env.APP_URL || "https://proactive-caring-production-1be5.up.railway.app";
+
+function formatDeadline(value?: string | null) {
+  return value ? value.replace(/-/g, "/") : "なし";
+}
+
+async function notifyDeadlineApproval(
+  task: { id: string; projectId: string; title: string },
+  request: { prevDue?: string | null; prevDueStart?: string | null; requestedDue?: string | null; requestedDueStart?: string | null; requesterName: string },
+  event: "requested" | "applied" | "approved" | "rejected",
+  approverName?: string
+) {
+  try {
+    const webhookUrl = await db.getSetting(`webhook_url_${task.projectId}`);
+    if (!webhookUrl) return;
+    const taskUrl = `${TASKBOARD_PUBLIC_URL}/?project=${task.projectId}&task=${task.id}`;
+    const heading = event === "requested"
+      ? "🕒 *期日変更の承認依頼*"
+      : event === "applied"
+      ? "📅 *期日が変更されました*"
+      : event === "approved"
+      ? "✅ *期日変更が承認されました*"
+      : "↩️ *期日変更が却下されました*";
+    const lines = [
+      heading,
+      `タスク: <${taskUrl}|${task.title}>`,
+      `現在: ${formatDeadline(request.prevDueStart)} ～ ${formatDeadline(request.prevDue)}`,
+      `変更案: ${formatDeadline(request.requestedDueStart)} ～ ${formatDeadline(request.requestedDue)}`,
+      `申請者: ${request.requesterName}`,
+      event === "requested" ? "矢作充隆さんの承認待ちです。" : event === "applied" ? "初回変更のため即時反映しました。" : `承認者: ${approverName || "矢作充隆"}`,
+    ];
+    void fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: lines.join("\n") }),
+    }).catch(() => undefined);
+  } catch {
+    // 通知不能でも、承認フロー本体は失敗させない。
+  }
 }
 
 async function getGoogleProjectMember(user: { email?: string | null; name?: string | null } | null, projectId: string) {
@@ -304,41 +346,13 @@ export const appRouter = router({
         taskStatus: z.string().nullable().optional(),
         changedBy: z.string().optional(),
       }))
-      .mutation(async ({ input, ctx }) => {
-        const { id, changedBy: inputChangedBy, ...data } = input;
-        // due / dueStart 変更時に履歴を記録 & Webhook通知
-        const DUE_WEBHOOK_URL = "https://chat.googleapis.com/v1/spaces/AAQAQO1z8W4/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=374QrZnIKaPqcIqKWP_rqofOLOyBhK4PUbX1PxKFKm8";
+      .mutation(async ({ input }) => {
+        const { id, changedBy: _changedBy, ...data } = input;
         if (data.due !== undefined || data.dueStart !== undefined) {
-          try {
-            const current = await db.getTaskById(id);
-            const prevDue = current?.due ?? null;
-            const newDue = data.due !== undefined ? (data.due ?? null) : prevDue;
-            const prevDueStart = (current as any)?.dueStart ?? null;
-            const newDueStart = data.dueStart !== undefined ? (data.dueStart ?? null) : prevDueStart;
-            const changedBy = inputChangedBy || ((ctx as any)?.req?.cookies ? (() => { try { const raw = (ctx as any).req.cookies["tb_proj_session"]; if (raw) { const p = JSON.parse(Buffer.from(raw.split(".")[1] ?? "", "base64").toString()); return p?.name || undefined; } } catch { return undefined; } })() : undefined);
-            // due（終了日）変更時に履歴記録
-            if (data.due !== undefined && prevDue !== newDue) {
-              await db.addDueHistory({ taskId: id, prevDue, newDue, changedBy });
-            }
-            // due or dueStart が変わった場合にWebhook通知
-            const dueChanged = data.due !== undefined && prevDue !== newDue;
-            const dueStartChanged = data.dueStart !== undefined && prevDueStart !== newDueStart;
-            if ((dueChanged || dueStartChanged) && current) {
-              const taskTitle = (current as any).title || id;
-              const fmt = (d: string | null) => d ? d.replace(/-/g, "/") : "なし";
-              const projectId = (current as any).projectId || "";
-              const taskUrl = `https://proactive-caring-production-1be5.up.railway.app/?project=${projectId}&task=${id}`;
-              const lines: string[] = [`📅 *期限日が変更されました*`, `タスク: <${taskUrl}|${taskTitle}>`];
-              if (dueStartChanged) lines.push(`開始日: ${fmt(prevDueStart)} → ${fmt(newDueStart)}`);
-              if (dueChanged) lines.push(`終了日: ${fmt(prevDue)} → ${fmt(newDue)}`);
-              if (changedBy) lines.push(`変更者: ${changedBy}`);
-              fetch(DUE_WEBHOOK_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: lines.join("\n") }),
-              }).catch(() => {});
-            }
-          } catch (_) { /* 履歴・通知エラーは無視 */ }
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "期日の変更は承認フローを通して申請してください",
+          });
         }
         await db.updateTask(id, data);
         // 完了カラムに移動した場合、100件超過分を古い順に自動削除
@@ -412,6 +426,114 @@ export const appRouter = router({
       .input(z.object({ taskId: z.string() }))
       .query(async ({ input }) => {
         return db.getDueHistory(input.taskId);
+      }),
+  }),
+
+  // ─── Deadline change approval ─────────────────────────────────────────────
+  dueChange: router({
+    request: publicProcedure
+      .input(z.object({
+        taskId: z.string(),
+        due: z.string().nullable().optional(),
+        dueStart: z.string().nullable().optional(),
+      }).refine((value) => value.due !== undefined || value.dueStart !== undefined, {
+        message: "変更する期日を指定してください",
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const requesterEmail = ctx.user?.email?.trim().toLowerCase();
+        if (!requesterEmail) throw new TRPCError({ code: "UNAUTHORIZED", message: "Google Workspaceでログインしてください" });
+        const requesterName = ctx.user?.name?.trim() || requesterEmail;
+        const task = await db.getTaskById(input.taskId);
+        if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "タスクが見つかりません" });
+
+        const requestedDue = input.due !== undefined ? normalizeDueDate(input.due) : normalizeDueDate(task.due);
+        const requestedDueStart = input.dueStart !== undefined ? normalizeDueDate(input.dueStart) : normalizeDueDate(task.dueStart);
+        if (!deadlineValuesChanged(task, { due: requestedDue, dueStart: requestedDueStart })) {
+          return { status: "unchanged" as const };
+        }
+
+        const history = await db.getDueHistory(input.taskId);
+        // 期限の最初の変更は即時反映する。
+        if (history.length === 0) {
+          await db.updateTask(input.taskId, { due: requestedDue, dueStart: requestedDueStart });
+          await db.addDueHistory({
+            taskId: input.taskId,
+            prevDue: normalizeDueDate(task.due),
+            newDue: requestedDue,
+            prevDueStart: normalizeDueDate(task.dueStart),
+            newDueStart: requestedDueStart,
+            changedBy: requesterName,
+          });
+          await notifyDeadlineApproval(task, {
+            prevDue: normalizeDueDate(task.due),
+            prevDueStart: normalizeDueDate(task.dueStart),
+            requestedDue,
+            requestedDueStart,
+            requesterName,
+          }, "applied");
+          return { status: "applied" as const };
+        }
+
+        const pending = await db.getPendingDueChangeRequest(input.taskId);
+        if (pending) {
+          return { status: "already_pending" as const, requestId: pending.id };
+        }
+        await db.createDueChangeRequest({
+          taskId: input.taskId,
+          prevDue: normalizeDueDate(task.due),
+          prevDueStart: normalizeDueDate(task.dueStart),
+          requestedDue,
+          requestedDueStart,
+          requesterEmail,
+          requesterName,
+          status: "pending",
+        });
+        const created = await db.getPendingDueChangeRequest(input.taskId);
+        if (created) await notifyDeadlineApproval(task, created, "requested");
+        return { status: "pending" as const, requestId: created?.id ?? null };
+      }),
+    getPending: publicProcedure
+      .input(z.object({ taskId: z.string() }))
+      .query(async ({ input, ctx }) => ({
+        request: await db.getPendingDueChangeRequest(input.taskId),
+        canApprove: isDueChangeApprover(ctx.user?.email),
+      })),
+    listPending: publicProcedure
+      .query(async ({ ctx }) => {
+        const canApprove = isDueChangeApprover(ctx.user?.email);
+        if (!canApprove) return { canApprove, requests: [] };
+        const pending = await db.listPendingDueChangeRequests();
+        const requests = await Promise.all(pending.map(async (request) => {
+          const task = await db.getTaskById(request.taskId);
+          const project = task ? await db.getProjectById(task.projectId) : null;
+          return {
+            ...request,
+            taskTitle: task?.title || "削除済みタスク",
+            projectId: task?.projectId || null,
+            projectName: project?.name || "削除済みプロジェクト",
+          };
+        }));
+        return { canApprove, requests };
+      }),
+    approve: publicProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        const email = ctx.user?.email?.trim().toLowerCase();
+        if (!isDueChangeApprover(email)) throw new TRPCError({ code: "FORBIDDEN", message: "矢作充隆さんのみ期日変更を承認できます" });
+        const result = await db.approveDueChangeRequest(input.id, { email: email!, name: ctx.user?.name?.trim() || email! });
+        const task = await db.getTaskById(result.request.taskId);
+        if (task && result.applied) await notifyDeadlineApproval(task, result.request, "approved", ctx.user?.name?.trim() || email!);
+        return { success: true, applied: result.applied, taskId: result.request.taskId };
+      }),
+    reject: publicProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        const email = ctx.user?.email?.trim().toLowerCase();
+        if (!isDueChangeApprover(email)) throw new TRPCError({ code: "FORBIDDEN", message: "矢作充隆さんのみ期日変更を却下できます" });
+        const result = await db.rejectDueChangeRequest(input.id, { email: email!, name: ctx.user?.name?.trim() || email! });
+        const task = await db.getTaskById(result.request.taskId);
+        if (task && result.applied) await notifyDeadlineApproval(task, result.request, "rejected", ctx.user?.name?.trim() || email!);
+        return { success: true, applied: result.applied, taskId: result.request.taskId };
       }),
   }),
 
@@ -994,4 +1116,3 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
-
