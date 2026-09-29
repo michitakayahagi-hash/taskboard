@@ -6,19 +6,29 @@
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 
+type Announcement = {
+  id: string;
+  date: string;
+  title: string;
+  body: string;
+  slideUrl?: string;
+};
+
 // ─── お知らせデータ（新機能追加時にここに追記する） ───────────────────────
-export const ANNOUNCEMENTS: { id: string; date: string; title: string; body: string }[] = [
+export const ANNOUNCEMENTS: Announcement[] = [
   {
     id: "2026-09-28-uptime-monitor",
     date: "2026/09/28",
     title: "🚨 アプリの稼働監視を追加しました",
-    body: "アプリが応答しなくなった場合に備え、5分間隔の自動稼働監視を導入しました。異常を検知したときと、復旧したタイミングで、担当のGoogle Chatスペースへ自動通知されます。\n\n詳細資料：[機能説明スライドを開く](https://files.manuscdn.com/user_upload_by_module/session_file/310519663307910496/wqpSsaEGXNSOdyGo.pdf)",
+    body: "アプリが応答しなくなった場合に備え、5分間隔の自動稼働監視を導入しました。異常を検知したときと、復旧したタイミングで、担当のGoogle Chatスペースへ自動通知されます。",
+    slideUrl: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663307910496/wqpSsaEGXNSOdyGo.pdf",
   },
   {
     id: "2026-09-28-due-change-approval",
     date: "2026/09/28",
     title: "📅 期日変更が承認制になりました",
-    body: "タスクの期日を何度も変更する場合、管理者の確認が必要になります。初回設定・1回目の変更は今まで通り即時反映されますが、2回目以降の変更は「承認待ち」となり、一覧から管理者が承認・却下できるようになりました。\n\n詳細資料：[機能説明スライドを開く](https://files.manuscdn.com/user_upload_by_module/session_file/310519663307910496/wqpSsaEGXNSOdyGo.pdf)",
+    body: "タスクの期日を何度も変更する場合、管理者の確認が必要になります。初回設定・1回目の変更は今まで通り即時反映されますが、2回目以降の変更は「承認待ち」となり、一覧から管理者が承認・却下できるようになりました。",
+    slideUrl: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663307910496/wqpSsaEGXNSOdyGo.pdf",
   },
   {
     id: "2026-06-22-creator-required",
@@ -88,35 +98,6 @@ function getReadIds(): string[] {
 
 function saveReadIds(ids: string[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
-}
-
-// お知らせ本文の [表示名](https://...) をクリックできる安全なリンクに変換する。
-function renderAnnouncementBody(text: string): React.ReactNode[] {
-  const parts: React.ReactNode[] = [];
-  const markdownLink = /\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-
-  while ((match = markdownLink.exec(text)) !== null) {
-    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
-    parts.push(
-      <a
-        key={`announcement-link-${key++}`}
-        href={match[2]}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(event) => event.stopPropagation()}
-        style={{ color: "#4f46e5", fontWeight: 700, textDecoration: "underline" }}
-      >
-        {match[1]}
-      </a>
-    );
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
-  return parts;
 }
 
 export default function AnnouncementBell() {
@@ -242,8 +223,36 @@ export default function AnnouncementBell() {
                       {a.title}
                     </div>
                     <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.8, whiteSpace: "pre-line" }}>
-                      {renderAnnouncementBody(a.body)}
+                      {a.body}
                     </div>
+                    {a.slideUrl && (
+                      <a
+                        href={a.slideUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          markRead(a.id);
+                        }}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          marginTop: 10,
+                          padding: "6px 9px",
+                          borderRadius: 7,
+                          background: "#eef2ff",
+                          border: "1px solid #c7d2fe",
+                          color: "#4338ca",
+                          fontSize: 11,
+                          fontWeight: 800,
+                          lineHeight: 1.2,
+                          textDecoration: "none",
+                        }}
+                      >
+                        📄 機能説明スライドを開く ↗
+                      </a>
+                    )}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
                       <span style={{ fontSize: 10, color: "#94a3b8" }}>{a.date}</span>
                       {!isRead && (
