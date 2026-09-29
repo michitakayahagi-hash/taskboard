@@ -90,6 +90,35 @@ function saveReadIds(ids: string[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
 }
 
+// お知らせ本文の [表示名](https://...) をクリックできる安全なリンクに変換する。
+function renderAnnouncementBody(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const markdownLink = /\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+
+  while ((match = markdownLink.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    parts.push(
+      <a
+        key={`announcement-link-${key++}`}
+        href={match[2]}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => event.stopPropagation()}
+        style={{ color: "#4f46e5", fontWeight: 700, textDecoration: "underline" }}
+      >
+        {match[1]}
+      </a>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts;
+}
+
 export default function AnnouncementBell() {
   const [open, setOpen] = useState(false);
   const [readIds, setReadIds] = useState<string[]>(getReadIds);
@@ -213,7 +242,7 @@ export default function AnnouncementBell() {
                       {a.title}
                     </div>
                     <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.8, whiteSpace: "pre-line" }}>
-                      {a.body}
+                      {renderAnnouncementBody(a.body)}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
                       <span style={{ fontSize: 10, color: "#94a3b8" }}>{a.date}</span>
