@@ -8,6 +8,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerGoogleAuthRoutes } from "./googleAuth";
 import { registerGeminiSyncRoutes, renewGeminiSyncWatches } from "./geminiSync";
 import { getDueNotificationPlan, getJstDate, isJapaneseBusinessDay } from "./businessCalendar";
+import { isNotificationExcludedTaskStatus, NOTIFICATION_EXCLUDED_TASK_STATUS } from "./notificationStatus";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -384,15 +385,17 @@ async function sendOverdueNotifications() {
     const allExclude = allExcludeIds.length > 0
       ? ` AND t.colId NOT IN (${allExcludeIds.map(() => '?').join(',')})`
       : "";
+    // 保留ステータスは、期限超過・期限未設定を含むすべての期限通知から除外する。
+    const holdStatusExclude = " AND (t.taskStatus IS NULL OR TRIM(t.taskStatus) <> ?)";
 
     // 期限超過タスクを取得（完了カラム以外、期日が今日より前）
-    const overdueQuery = `SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN \`columns\` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE t.due IS NOT NULL AND t.due != '' AND t.due < ?${doneExclude}`;
-    const overdueParams: any[] = [jstToday, ...doneColIds];
+    const overdueQuery = `SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN \`columns\` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE t.due IS NOT NULL AND t.due != '' AND t.due < ?${holdStatusExclude}${doneExclude}`;
+    const overdueParams: any[] = [jstToday, NOTIFICATION_EXCLUDED_TASK_STATUS, ...doneColIds];
     const [overdueTasks] = await conn.execute(overdueQuery, overdueParams) as any[];
 
     // 期限未設定タスクを取得（完了・日々作業カラム以外、dueがNULLまたは空文字）
-    const noDueQuery = `SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN \`columns\` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE (t.due IS NULL OR t.due = '')${allExclude}`;
-    const noDueParams: any[] = [...allExcludeIds];
+    const noDueQuery = `SELECT t.id, t.title, t.assignee, t.due, t.colId, t.projectId, c.title as colTitle, p.name as projectName FROM tasks t LEFT JOIN \`columns\` c ON t.colId = c.id LEFT JOIN projects p ON t.projectId = p.id WHERE (t.due IS NULL OR t.due = '')${holdStatusExclude}${allExclude}`;
+    const noDueParams: any[] = [NOTIFICATION_EXCLUDED_TASK_STATUS, ...allExcludeIds];
     const [noDueTasks] = await conn.execute(noDueQuery, noDueParams) as any[];
 
     if (overdueTasks.length === 0 && noDueTasks.length === 0) {
@@ -519,17 +522,20 @@ async function sendDueNotifications(kind: DueNotificationKind) {
     const [doneColumns] = await conn.execute("SELECT id FROM `columns` WHERE title = '完了'") as any[];
     const doneColIds: string[] = doneColumns.map((column: any) => column.id);
     const doneExclude = doneColIds.length > 0 ? ` AND t.colId NOT IN (${doneColIds.map(() => "?").join(",")})` : "";
+    const holdStatusExclude = " AND (t.taskStatus IS NULL OR TRIM(t.taskStatus) <> ?)";
 
-    // 親タスクが完了カラムにあるものは、小タスクを含めてすべて通知対象外にする。
-    const taskQuery = `SELECT t.id, t.title, t.assignee, t.due, t.subtasks, t.projectId, c.title AS colTitle, p.name AS projectName
+    // 親タスクが完了・保留の場合は、小タスクを含めてすべて通知対象外にする。
+    const taskQuery = `SELECT t.id, t.title, t.assignee, t.due, t.subtasks, t.taskStatus, t.projectId, c.title AS colTitle, p.name AS projectName
       FROM tasks t
       LEFT JOIN \`columns\` c ON t.colId = c.id
       LEFT JOIN projects p ON t.projectId = p.id
-      WHERE (t.due IN (${targetDates.map(() => "?").join(",")}) OR t.subtasks IS NOT NULL)${doneExclude}`;
-    const [rows] = await conn.execute(taskQuery, [...targetDates, ...doneColIds]) as any[];
+      WHERE (t.due IN (${targetDates.map(() => "?").join(",")}) OR t.subtasks IS NOT NULL)${holdStatusExclude}${doneExclude}`;
+    const [rows] = await conn.execute(taskQuery, [...targetDates, NOTIFICATION_EXCLUDED_TASK_STATUS, ...doneColIds]) as any[];
 
     const itemsByProject: Record<string, DueNotificationItem[]> = {};
     for (const task of rows) {
+      // SQLでの除外に加え、親タスクの保留状態を二重に確認する。
+      if (isNotificationExcludedTaskStatus(task.taskStatus)) continue;
       const projectId = task.projectId;
       if (!projectId) continue;
       const add = (item: DueNotificationItem) => {
