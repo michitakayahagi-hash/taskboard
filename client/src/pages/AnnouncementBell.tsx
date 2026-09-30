@@ -17,6 +17,13 @@ type Announcement = {
 // ─── お知らせデータ（新機能追加時にここに追記する） ───────────────────────
 export const ANNOUNCEMENTS: Announcement[] = [
   {
+    id: "2026-09-30-hold-status-notification",
+    date: "2026/09/30",
+    title: "⏸️ 保留中は、すべての期限通知を停止するようになりました",
+    body: "タスク詳細画面でステータスを「保留」に設定するだけで、期日が入っていても「期限前日」「期限当日」「期限超過」「期限未設定」のすべてのGoogle Chat通知から自動で外れるようになりました。保留中の親タスクに含まれる小タスク（チェックリスト）も通知されません。\n保留を解除（未対応・対応中などに変更）すれば、次回の定時スケジュールから再び通知判定が再開されます。",
+    slideUrl: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663307910496/XPhnNtJnMLykqpiH.pdf",
+  },
+  {
     id: "2026-09-28-uptime-monitor",
     date: "2026/09/28",
     title: "🚨 アプリの稼働監視を追加しました",
