@@ -4,7 +4,7 @@ import type { Express, Request, Response } from "express";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
-import { getGoogleHostedDomainHint, isAllowedGoogleWorkspaceEmail } from "./googleDomainPolicy";
+import { getGoogleHostedDomainHint, isAllowedTaskBoardEmail } from "./googleDomainPolicy";
 
 const GOOGLE_SESSION_COOKIE = "tb_google_session";
 const GOOGLE_STATE_COOKIE = "tb_google_oauth_state";
@@ -149,7 +149,7 @@ export function registerGoogleAuthRoutes(app: Express) {
       });
       const email = typeof payload.email === "string" ? payload.email.toLowerCase() : "";
       const emailVerified = payload.email_verified === true || payload.email_verified === "true";
-      if (!payload.sub || !emailVerified || !isAllowedGoogleWorkspaceEmail(email)) {
+      if (!payload.sub || !emailVerified || !isAllowedTaskBoardEmail(email)) {
         res.redirect(302, "/login?error=domain");
         return;
       }

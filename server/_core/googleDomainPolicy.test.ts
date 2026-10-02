@@ -3,6 +3,8 @@ import {
   allowedGoogleDomainLabel,
   getAllowedGoogleDomains,
   getGoogleHostedDomainHint,
+  isAllowedExternalTaskBoardEmail,
+  isAllowedTaskBoardEmail,
   isAllowedGoogleWorkspaceEmail,
 } from "./googleDomainPolicy";
 
@@ -24,5 +26,25 @@ describe("Google Workspace domain policy", () => {
   it("uses the OAuth hosted-domain hint only when exactly one domain is allowed", () => {
     expect(getGoogleHostedDomainHint("b-bloom.jp")).toBe("b-bloom.jp");
     expect(getGoogleHostedDomainHint(domains)).toBeNull();
+  });
+
+  it("permits only explicitly allowlisted external accounts to sign in", () => {
+    const externalEmails = "kisaragi.0205.star@gmail.com";
+    expect(isAllowedExternalTaskBoardEmail("kisaragi.0205.star@gmail.com", externalEmails)).toBe(true);
+    expect(isAllowedExternalTaskBoardEmail("other@gmail.com", externalEmails)).toBe(false);
+    const oldDomains = process.env.GOOGLE_ALLOWED_DOMAIN;
+    const oldExternalEmails = process.env.TASKBOARD_ALLOWED_EXTERNAL_EMAILS;
+    process.env.GOOGLE_ALLOWED_DOMAIN = domains;
+    process.env.TASKBOARD_ALLOWED_EXTERNAL_EMAILS = externalEmails;
+    try {
+      expect(isAllowedTaskBoardEmail("member@b-bloom.jp")).toBe(true);
+      expect(isAllowedTaskBoardEmail("kisaragi.0205.star@gmail.com")).toBe(true);
+      expect(isAllowedTaskBoardEmail("other@gmail.com")).toBe(false);
+    } finally {
+      if (oldDomains === undefined) delete process.env.GOOGLE_ALLOWED_DOMAIN;
+      else process.env.GOOGLE_ALLOWED_DOMAIN = oldDomains;
+      if (oldExternalEmails === undefined) delete process.env.TASKBOARD_ALLOWED_EXTERNAL_EMAILS;
+      else process.env.TASKBOARD_ALLOWED_EXTERNAL_EMAILS = oldExternalEmails;
+    }
   });
 });

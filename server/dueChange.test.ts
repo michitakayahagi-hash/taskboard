@@ -107,6 +107,26 @@ describe("due change approval routes", () => {
     expect(db.updateTask).not.toHaveBeenCalled();
   });
 
+  it("limits an allowlisted external account to its explicitly assigned public project", async () => {
+    const previousExternalEmails = process.env.TASKBOARD_ALLOWED_EXTERNAL_EMAILS;
+    process.env.TASKBOARD_ALLOWED_EXTERNAL_EMAILS = "kisaragi.0205.star@gmail.com";
+    db.getProjectById.mockResolvedValue({ id: "project-1", isPublic: true });
+    const caller = appRouter.createCaller(createContext("kisaragi.0205.star@gmail.com"));
+
+    try {
+      await expect(caller.dueChange.request({ taskId: "task-1", due: "2026-10-12" }))
+        .rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      db.getMemberByEmailAndProject.mockResolvedValue({ id: 8, role: "editor", isAdmin: false });
+      db.getDueHistory.mockResolvedValue([]);
+      await expect(caller.dueChange.request({ taskId: "task-1", due: "2026-10-12" }))
+        .resolves.toEqual({ status: "applied" });
+    } finally {
+      if (previousExternalEmails === undefined) delete process.env.TASKBOARD_ALLOWED_EXTERNAL_EMAILS;
+      else process.env.TASKBOARD_ALLOWED_EXTERNAL_EMAILS = previousExternalEmails;
+    }
+  });
+
   it("allows only Michitaka Yahagi to approve a queued change", async () => {
     const queuedRequest = { id: 9, taskId: "task-1", requesterName: "テスト利用者", prevDue: "2026-10-10", prevDueStart: "2026-10-01", requestedDue: "2026-10-12", requestedDueStart: "2026-10-02" };
     db.approveDueChangeRequest.mockResolvedValue({ request: queuedRequest, applied: true });

@@ -108,13 +108,16 @@ async function getGoogleProjectMember(user: { email?: string | null; name?: stri
 type ProjectAccessUser = { email?: string | null; name?: string | null } | null;
 
 /**
- * 公開プロジェクトは許可済みドメインでログインした全員が編集可能。
+ * 公開プロジェクトは許可済み組織ドメインでログインした全員が編集可能。
+ * 明示許可した外部メールは、公開設定であっても登録済みのプロジェクトにだけアクセス可能にする。
  * 非公開プロジェクトは登録済みメンバーのみアクセス可能にする。
  */
 async function getProjectAccess(user: ProjectAccessUser, projectId: string) {
   const project = await db.getProjectById(projectId);
   if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "プロジェクトが見つかりません" });
-  if (project.isPublic) return { project, member: null, canEdit: true };
+  if (project.isPublic && isAllowedGoogleWorkspaceEmail(user?.email)) {
+    return { project, member: null, canEdit: true };
+  }
 
   const member = await getGoogleProjectMember(user, projectId);
   if (!member) throw new TRPCError({ code: "FORBIDDEN", message: "このプロジェクトへの権限がありません" });
@@ -921,9 +924,11 @@ export const appRouter = router({
     // isPublic=true の場合はメンバーがいてもログイン不要
     hasRestriction: publicProcedure
       .input(z.object({ projectId: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         const project = await db.getProjectById(input.projectId);
-        if (project?.isPublic) return { restricted: false };
+        if (project?.isPublic && isAllowedGoogleWorkspaceEmail(ctx.user?.email)) return { restricted: false };
+        // 外部アカウントは、公開プロジェクトでも個別登録の有無で判定する。
+        if (project?.isPublic) return { restricted: true };
         const restricted = await db.hasAnyMember(input.projectId);
         return { restricted };
       }),
@@ -941,7 +946,7 @@ export const appRouter = router({
       .query(async ({ input, ctx }) => {
         const project = await db.getProjectById(input.projectId);
         if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "プロジェクトが見つかりません" });
-        if (project.isPublic) return null;
+        if (project.isPublic && isAllowedGoogleWorkspaceEmail(ctx.user?.email)) return null;
         const member = await getGoogleProjectMember(ctx.user, input.projectId);
         if (!member) return null;
         return { name: member.name, email: member.email, role: member.role, isAdmin: member.isAdmin };
