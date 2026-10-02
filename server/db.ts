@@ -381,6 +381,13 @@ export async function getCommentsByTask(taskId: string) {
   return db.select().from(comments).where(eq(comments.taskId, taskId)).orderBy(asc(comments.createdAt));
 }
 
+export async function getCommentById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
 export async function createComment(data: InsertComment) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
@@ -519,6 +526,12 @@ export async function getAttachmentsByTask(taskId: string) {
   if (!db) return [];
   return db.select().from(attachments).where(eq(attachments.taskId, taskId)).orderBy(asc(attachments.createdAt));
 }
+export async function getAttachmentById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(attachments).where(eq(attachments.id, id)).limit(1);
+  return result[0] ?? null;
+}
 export async function deleteAttachment(id: number) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
@@ -530,6 +543,12 @@ export async function getSubtaskTemplates(projectId: string) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(subtaskTemplates).where(eq(subtaskTemplates.projectId, projectId)).orderBy(asc(subtaskTemplates.createdAt));
+}
+export async function getSubtaskTemplateById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(subtaskTemplates).where(eq(subtaskTemplates.id, id)).limit(1);
+  return result[0] ?? null;
 }
 export async function createSubtaskTemplate(data: InsertSubtaskTemplate) {
   const db = await getDb();

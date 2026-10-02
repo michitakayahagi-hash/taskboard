@@ -12,6 +12,7 @@ import { randomUUID } from "crypto";
 import { sendInvitationEmail } from "./_core/mailer";
 import { storagePut } from "./storage";
 import { deadlineValuesChanged, isDueChangeApprover, normalizeDueDate } from "./_core/dueChangeApproval";
+import { isAllowedGoogleWorkspaceEmail } from "./_core/googleDomainPolicy";
 
 // Cookie name for project-level auth sessions
 const PROJECT_SESSION_COOKIE = "tb_proj_session";
@@ -104,7 +105,57 @@ async function getGoogleProjectMember(user: { email?: string | null; name?: stri
   return db.getMemberByEmailAndProject(projectId, email);
 }
 
+type ProjectAccessUser = { email?: string | null; name?: string | null } | null;
+
+/**
+ * 公開プロジェクトは許可済みドメインでログインした全員が編集可能。
+ * 非公開プロジェクトは登録済みメンバーのみアクセス可能にする。
+ */
+async function getProjectAccess(user: ProjectAccessUser, projectId: string) {
+  const project = await db.getProjectById(projectId);
+  if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "プロジェクトが見つかりません" });
+  if (project.isPublic) return { project, member: null, canEdit: true };
+
+  const member = await getGoogleProjectMember(user, projectId);
+  if (!member) throw new TRPCError({ code: "FORBIDDEN", message: "このプロジェクトへの権限がありません" });
+  return { project, member, canEdit: member.isAdmin || member.role === "editor" };
+}
+
+async function assertProjectReadable(user: ProjectAccessUser, projectId: string) {
+  return getProjectAccess(user, projectId);
+}
+
+async function assertProjectEditable(user: ProjectAccessUser, projectId: string) {
+  const access = await getProjectAccess(user, projectId);
+  if (!access.canEdit) throw new TRPCError({ code: "FORBIDDEN", message: "このプロジェクトは閲覧のみです" });
+  return access;
+}
+
+async function assertTaskReadable(user: ProjectAccessUser, taskId: string) {
+  const task = await db.getTaskById(taskId);
+  if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "タスクが見つかりません" });
+  await assertProjectReadable(user, task.projectId);
+  return task;
+}
+
+async function assertTaskEditable(user: ProjectAccessUser, taskId: string) {
+  const task = await db.getTaskById(taskId);
+  if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "タスクが見つかりません" });
+  await assertProjectEditable(user, task.projectId);
+  return task;
+}
+
+function getProjectIdFromSettingKey(key: string): string | null {
+  const simpleProjectKey = /^(?:webhook_url|members)_(.+)$/.exec(key);
+  if (simpleProjectKey?.[1]) return simpleProjectKey[1];
+  const statusProjectKey = /^project_(.+)_statuses$/.exec(key);
+  return statusProjectKey?.[1] ?? null;
+}
+
 async function assertGoogleProjectAdmin(user: { email?: string | null } | null, projectId: string) {
+  const project = await db.getProjectById(projectId);
+  if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "プロジェクトが見つかりません" });
+  if (project.isPublic) throw new TRPCError({ code: "BAD_REQUEST", message: "公開プロジェクトでは個別権限を設定できません" });
   const hasMembers = await db.hasAnyMember(projectId);
   // メンバー未設定プロジェクトは、最初の管理者登録を許可する。
   if (!hasMembers) return null;
@@ -182,35 +233,50 @@ export const appRouter = router({
 
   // ─── Projects ───────────────────────────────────────────────────────────
   project: router({
-    list: publicProcedure.query(async () => {
-      return db.getAllProjects();
+    list: publicProcedure.query(async ({ ctx }) => {
+      const projects = await db.getAllProjects();
+      const visibleProjects = await Promise.all(projects.map(async (project) => {
+        try {
+          await assertProjectReadable(ctx.user, project.id);
+          return project;
+        } catch {
+          return null;
+        }
+      }));
+      return visibleProjects.filter((project): project is NonNullable<typeof project> => project !== null);
     }),
     create: publicProcedure
       .input(z.object({ id: z.string(), name: z.string(), color: z.string() }))
       .mutation(async ({ input }) => {
-        await db.createProject(input);
-        return input;
+        // 経理業務以外は、組織ドメインのログイン利用者へ公開する運用を標準にする。
+        const project = { ...input, isPublic: true };
+        await db.createProject(project);
+        return project;
       }),
     update: publicProcedure
       .input(z.object({ id: z.string(), name: z.string().optional(), color: z.string().optional(), isPublic: z.boolean().optional(), webhookUrl: z.string().optional().nullable() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
+        if (data.isPublic !== undefined) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "公開・限定の切り替えは管理者設定から行ってください" });
+        }
+        await assertProjectEditable(ctx.user, id);
         await db.updateProject(id, data);
         return { success: true };
       }),
     delete: publicProcedure
       .input(z.object({ id: z.string() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        await assertProjectEditable(ctx.user, input.id);
         await db.deleteProject(input.id);
         return { success: true };
       }),
     duplicate: publicProcedure
       .input(z.object({ id: z.string() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         // 元プロジェクトを取得
-        const allProjects = await db.getAllProjects();
-        const src = allProjects.find((p: any) => p.id === input.id);
-        if (!src) throw new TRPCError({ code: "NOT_FOUND", message: "プロジェクトが見つかりません" });
+        const srcAccess = await assertProjectEditable(ctx.user, input.id);
+        const src = srcAccess.project;
 
         const now = Date.now();
         const newProjectId = "p" + now;
@@ -220,6 +286,7 @@ export const appRouter = router({
           id: newProjectId,
           name: src.name + "のコピー",
           color: src.color,
+          isPublic: src.isPublic,
           webhookUrl: src.webhookUrl ?? null,
         });
 
@@ -267,25 +334,33 @@ export const appRouter = router({
   column: router({
     list: publicProcedure
       .input(z.object({ projectId: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        await assertProjectReadable(ctx.user, input.projectId);
         return db.getColumnsByProject(input.projectId);
       }),
     create: publicProcedure
       .input(z.object({ id: z.string(), projectId: z.string(), title: z.string(), color: z.string(), sortOrder: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        await assertProjectEditable(ctx.user, input.projectId);
         await db.createColumn(input);
         return input;
       }),
     update: publicProcedure
       .input(z.object({ id: z.string(), title: z.string().optional(), color: z.string().optional(), sortOrder: z.number().optional() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
+        const column = await db.getColumnById(id);
+        if (!column) throw new TRPCError({ code: "NOT_FOUND", message: "カラムが見つかりません" });
+        await assertProjectEditable(ctx.user, column.projectId);
         await db.updateColumn(id, data);
         return { success: true };
       }),
     delete: publicProcedure
       .input(z.object({ id: z.string() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const column = await db.getColumnById(input.id);
+        if (!column) throw new TRPCError({ code: "NOT_FOUND", message: "カラムが見つかりません" });
+        await assertProjectEditable(ctx.user, column.projectId);
         await db.deleteColumn(input.id);
         return { success: true };
       }),
@@ -295,17 +370,28 @@ export const appRouter = router({
   task: router({
     list: publicProcedure
       .input(z.object({ projectId: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        await assertProjectReadable(ctx.user, input.projectId);
         return db.getTasksByProject(input.projectId);
       }),
     listAll: publicProcedure
-      .query(async () => {
-        return db.getAllTasksWithMeta();
+      .query(async ({ ctx }) => {
+        const allTasks = await db.getAllTasksWithMeta();
+        const accessibleProjectIds = new Set<string>();
+        for (const projectId of Array.from(new Set(allTasks.map((task: any) => task.projectId)))) {
+          try {
+            await assertProjectReadable(ctx.user, projectId);
+            accessibleProjectIds.add(projectId);
+          } catch {
+            // 非公開プロジェクトの権限がない場合は一覧から除外する。
+          }
+        }
+        return allTasks.filter((task: any) => accessibleProjectIds.has(task.projectId));
       }),
     get: publicProcedure
       .input(z.object({ id: z.string() }))
-      .query(async ({ input }) => {
-        return db.getTaskById(input.id);
+      .query(async ({ input, ctx }) => {
+        return assertTaskReadable(ctx.user, input.id);
       }),
     create: publicProcedure
       .input(z.object({
@@ -324,7 +410,8 @@ export const appRouter = router({
         createdBy: z.string().optional(),
         taskStatus: z.string().nullable().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        await assertProjectEditable(ctx.user, input.projectId);
         await db.createTask(input);
         return input;
       }),
@@ -346,8 +433,9 @@ export const appRouter = router({
         taskStatus: z.string().nullable().optional(),
         changedBy: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, changedBy: _changedBy, ...data } = input;
+        await assertTaskEditable(ctx.user, id);
         if (data.due !== undefined || data.dueStart !== undefined) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -376,7 +464,8 @@ export const appRouter = router({
       }),
     delete: publicProcedure
       .input(z.object({ id: z.string() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        await assertTaskEditable(ctx.user, input.id);
         await db.deleteTask(input.id);
         return { success: true };
       }),
@@ -386,7 +475,9 @@ export const appRouter = router({
         targetProjectId: z.string(),
         targetColId: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        await assertTaskEditable(ctx.user, input.id);
+        await assertProjectEditable(ctx.user, input.targetProjectId);
         let colId: string;
         if (input.targetColId) {
           colId = input.targetColId;
@@ -414,7 +505,11 @@ export const appRouter = router({
         colId: z.string(),
         targetProjectId: z.string(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const column = await db.getColumnById(input.colId);
+        if (!column) throw new TRPCError({ code: "NOT_FOUND", message: "カラムが見つかりません" });
+        await assertProjectEditable(ctx.user, column.projectId);
+        await assertProjectEditable(ctx.user, input.targetProjectId);
         const result = await db.moveColumnToProject(input.colId, input.targetProjectId);
         return { success: true, movedCount: result.movedCount, newColId: result.newColId };
       }),
@@ -424,7 +519,8 @@ export const appRouter = router({
   dueHistory: router({
     list: publicProcedure
       .input(z.object({ taskId: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        await assertTaskReadable(ctx.user, input.taskId);
         return db.getDueHistory(input.taskId);
       }),
   }),
@@ -445,6 +541,7 @@ export const appRouter = router({
         const requesterName = ctx.user?.name?.trim() || requesterEmail;
         const task = await db.getTaskById(input.taskId);
         if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "タスクが見つかりません" });
+        await assertProjectEditable(ctx.user, task.projectId);
 
         const requestedDue = input.due !== undefined ? normalizeDueDate(input.due) : normalizeDueDate(task.due);
         const requestedDueStart = input.dueStart !== undefined ? normalizeDueDate(input.dueStart) : normalizeDueDate(task.dueStart);
@@ -494,10 +591,13 @@ export const appRouter = router({
       }),
     getPending: publicProcedure
       .input(z.object({ taskId: z.string() }))
-      .query(async ({ input, ctx }) => ({
-        request: await db.getPendingDueChangeRequest(input.taskId),
-        canApprove: isDueChangeApprover(ctx.user?.email),
-      })),
+      .query(async ({ input, ctx }) => {
+        await assertTaskReadable(ctx.user, input.taskId);
+        return {
+          request: await db.getPendingDueChangeRequest(input.taskId),
+          canApprove: isDueChangeApprover(ctx.user?.email),
+        };
+      }),
     listPending: publicProcedure
       .query(async ({ ctx }) => {
         const canApprove = isDueChangeApprover(ctx.user?.email);
@@ -541,7 +641,8 @@ export const appRouter = router({
   comment: router({
     list: publicProcedure
       .input(z.object({ taskId: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        await assertTaskReadable(ctx.user, input.taskId);
         return db.getCommentsByTask(input.taskId);
       }),
     create: publicProcedure
@@ -550,13 +651,17 @@ export const appRouter = router({
         author: z.string(),
         text: z.string(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        await assertTaskEditable(ctx.user, input.taskId);
         await db.createComment(input);
         return { success: true };
       }),
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const comment = await db.getCommentById(input.id);
+        if (!comment) throw new TRPCError({ code: "NOT_FOUND", message: "コメントが見つかりません" });
+        await assertTaskEditable(ctx.user, comment.taskId);
         await db.deleteComment(input.id);
         return { success: true };
       }),
@@ -597,7 +702,7 @@ export const appRouter = router({
         // Create project
         const projectId = "p" + Date.now();
         const projectColor = COL_COLORS[Math.floor(Math.random() * COL_COLORS.length)];
-        await db.createProject({ id: projectId, name: projectName, color: projectColor });
+        await db.createProject({ id: projectId, name: projectName, color: projectColor, isPublic: true });
 
         // Collect unique list names (preserve order)
         const listNames: string[] = [];
@@ -771,13 +876,17 @@ export const appRouter = router({
   setting: router({
     get: publicProcedure
       .input(z.object({ key: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        const projectId = getProjectIdFromSettingKey(input.key);
+        if (projectId) await assertProjectReadable(ctx.user, projectId);
         const value = await db.getSetting(input.key);
         return { key: input.key, value };
       }),
     set: publicProcedure
       .input(z.object({ key: z.string(), value: z.string() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const projectId = getProjectIdFromSettingKey(input.key);
+        if (projectId) await assertProjectEditable(ctx.user, projectId);
         await db.setSetting(input.key, input.value);
         return { success: true };
       }),
@@ -830,6 +939,9 @@ export const appRouter = router({
     getSession: publicProcedure
       .input(z.object({ projectId: z.string() }))
       .query(async ({ input, ctx }) => {
+        const project = await db.getProjectById(input.projectId);
+        if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "プロジェクトが見つかりません" });
+        if (project.isPublic) return null;
         const member = await getGoogleProjectMember(ctx.user, input.projectId);
         if (!member) return null;
         return { name: member.name, email: member.email, role: member.role, isAdmin: member.isAdmin };
@@ -858,6 +970,9 @@ export const appRouter = router({
     listMembers: publicProcedure
       .input(z.object({ projectId: z.string() }))
       .query(async ({ input, ctx }) => {
+        const project = await db.getProjectById(input.projectId);
+        if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "プロジェクトが見つかりません" });
+        if (project.isPublic) return [];
         const hasMembers = await db.hasAnyMember(input.projectId);
         const currentMember = await getGoogleProjectMember(ctx.user, input.projectId);
         if (hasMembers && !currentMember) throw new TRPCError({ code: "FORBIDDEN", message: "このプロジェクトへの権限がありません" });
@@ -870,9 +985,9 @@ export const appRouter = router({
       .input(z.object({ projectId: z.string(), name: z.string().min(1), email: z.string().email(), role: z.enum(["viewer", "editor"]), isAdmin: z.boolean().optional() }))
       .mutation(async ({ input, ctx }) => {
         const normalizedEmail = input.email.toLowerCase();
-        if (!normalizedEmail.endsWith("@b-bloom.jp")) throw new TRPCError({ code: "BAD_REQUEST", message: "@b-bloom.jp のメールアドレスを指定してください" });
-        const hasMembers = await db.hasAnyMember(input.projectId);
+        if (!isAllowedGoogleWorkspaceEmail(normalizedEmail)) throw new TRPCError({ code: "BAD_REQUEST", message: "@b-bloom.jp または @b-noix.jp のメールアドレスを指定してください" });
         await assertGoogleProjectAdmin(ctx.user, input.projectId);
+        const hasMembers = await db.hasAnyMember(input.projectId);
         if (!hasMembers && ctx.user?.email?.toLowerCase() !== normalizedEmail) {
           throw new TRPCError({ code: "FORBIDDEN", message: "最初の管理者には、ログイン中のGoogle Workspaceメールアドレスを登録してください" });
         }
@@ -924,7 +1039,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const normalizedEmail = input.email.toLowerCase();
-        if (!normalizedEmail.endsWith("@b-bloom.jp")) throw new TRPCError({ code: "BAD_REQUEST", message: "@b-bloom.jp のメールアドレスを指定してください" });
+        if (!isAllowedGoogleWorkspaceEmail(normalizedEmail)) throw new TRPCError({ code: "BAD_REQUEST", message: "@b-bloom.jp または @b-noix.jp のメールアドレスを指定してください" });
         const inviter = await assertGoogleProjectAdmin(ctx.user, input.projectId);
         const existingMember = await db.getMemberByEmailAndProject(input.projectId, normalizedEmail);
         if (existingMember) throw new TRPCError({ code: "CONFLICT", message: "このメールアドレスはすでにメンバーです" });
@@ -1028,7 +1143,8 @@ export const appRouter = router({
     // 添付ファイル一覧取得
     list: publicProcedure
       .input(z.object({ taskId: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        await assertTaskReadable(ctx.user, input.taskId);
         return db.getAttachmentsByTask(input.taskId);
       }),
     // 添付ファイル登録（Base64エンコードで受け取り、サーバーサイドでストレージに保存）
@@ -1041,8 +1157,9 @@ export const appRouter = router({
         mimeType: z.string(),
         uploadedBy: z.string(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { taskId, fileName, fileBase64, fileSize, mimeType, uploadedBy } = input;
+        await assertTaskEditable(ctx.user, taskId);
         // Base64デコード
         const base64Data = fileBase64.replace(/^data:[^;]+;base64,/, "");
         const buffer = Buffer.from(base64Data, "base64");
@@ -1068,7 +1185,10 @@ export const appRouter = router({
     // 添付ファイル削除
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const attachment = await db.getAttachmentById(input.id);
+        if (!attachment) throw new TRPCError({ code: "NOT_FOUND", message: "添付ファイルが見つかりません" });
+        await assertTaskEditable(ctx.user, attachment.taskId);
         await db.deleteAttachment(input.id);
         return { success: true };
       }),
@@ -1079,7 +1199,8 @@ export const appRouter = router({
     // テンプレート一覧取得
     list: publicProcedure
       .input(z.object({ projectId: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        await assertProjectReadable(ctx.user, input.projectId);
         return db.getSubtaskTemplates(input.projectId);
       }),
     // テンプレート作成
@@ -1089,7 +1210,8 @@ export const appRouter = router({
         name: z.string().min(1),
         items: z.array(z.string()),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        await assertProjectEditable(ctx.user, input.projectId);
         await db.createSubtaskTemplate(input);
         return { success: true };
       }),
@@ -1100,15 +1222,21 @@ export const appRouter = router({
         name: z.string().optional(),
         items: z.array(z.string()).optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
+        const template = await db.getSubtaskTemplateById(id);
+        if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "小タスクテンプレートが見つかりません" });
+        await assertProjectEditable(ctx.user, template.projectId);
         await db.updateSubtaskTemplate(id, data);
         return { success: true };
       }),
     // テンプレート削除
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const template = await db.getSubtaskTemplateById(input.id);
+        if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "小タスクテンプレートが見つかりません" });
+        await assertProjectEditable(ctx.user, template.projectId);
         await db.deleteSubtaskTemplate(input.id);
         return { success: true };
       }),

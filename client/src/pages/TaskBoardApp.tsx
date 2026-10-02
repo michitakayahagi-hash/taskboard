@@ -1217,9 +1217,10 @@ function AddProjectModal({ onClose, onSave, existingCount }: { onClose: () => vo
 }
 
 // ─── SettingsModal ────────────────────────────────────────────────────────────
-function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, onSave, onClose }: {
+function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isRestricted, onSave, onClose }: {
   webhookUrl: string; members: string[]; projectId: string;
   currentUserIsAdmin?: boolean;
+  isRestricted: boolean;
   onSave: (url: string, members: string[]) => void; onClose: () => void;
 }) {
   const [url, setUrl] = useState(webhookUrl);
@@ -1331,9 +1332,17 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, onS
         {activeTab === "access" && (
           <>
             <div style={{ background: "#f5f3ff", border: "1.5px solid #c7d2fe", borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 11, color: "#4338ca", lineHeight: 1.6 }}>
-              このアプリはGoogle Workspaceログインが必須です。プロジェクトごとの閲覧・編集権限は、下のメンバー登録で管理します。
+              {isRestricted
+                ? "このプロジェクトは限定公開です。下のメンバー登録で閲覧・編集権限を管理します。"
+                : "このプロジェクトは公開設定です。@b-bloom.jp または @b-noix.jp のGoogle Workspaceアカウントでログインした全員が閲覧・編集できます。"}
             </div>
-            <ProjectMemberSettings projectId={projectId} currentUserIsAdmin={currentUserIsAdmin} />
+            {isRestricted ? (
+              <ProjectMemberSettings projectId={projectId} currentUserIsAdmin={currentUserIsAdmin} />
+            ) : (
+              <div style={{ padding: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, color: "#64748b", fontSize: 12, lineHeight: 1.7 }}>
+                個別メンバーの設定は不要です。限定管理が必要な場合のみ、管理者へ設定変更を依頼してください。
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
               <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>閉じる</button>
             </div>
@@ -2065,7 +2074,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
       )}
       {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} currentUser={projectSession?.name || members[0] || ""} onClose={() => setModal(null)} onSave={saveTask} />}
       {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} onMoveTask={canEdit ? (id, targetProjectId, targetColId) => { moveTask.mutate({ id, targetProjectId, targetColId }); setDetailTask(null); } : undefined} allProjects={allProjects?.filter(p => p.id !== project.id) || []} onComplete={onComplete} onRevert={onRevert} doneColIds={doneColIds} />}
-      {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isRestricted={isRestricted} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </div>
   );

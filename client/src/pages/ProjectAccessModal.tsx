@@ -40,7 +40,7 @@ export function ProjectLoginModal({
           「{projectName}」を閲覧するには、Google Workspaceのメールアドレスをこのプロジェクトのメンバーとして登録する必要があります。
         </p>
         <p style={{ margin: "0 0 20px", fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>
-          プロジェクト管理者に、あなたの <strong>@b-bloom.jp</strong> メールアドレスの追加を依頼してください。
+          プロジェクト管理者に、あなたの <strong>@b-bloom.jp または @b-noix.jp</strong> メールアドレスの追加を依頼してください。
         </p>
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button onClick={onCancel} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, padding: "9px 18px", cursor: "pointer", fontWeight: 800, fontSize: 13, fontFamily: "'Noto Sans JP',sans-serif" }}>戻る</button>
@@ -87,8 +87,8 @@ export function ProjectMemberSettings({
       setAddError("名前とGoogle Workspaceメールアドレスを入力してください");
       return;
     }
-    if (!email.endsWith("@b-bloom.jp")) {
-      setAddError("@b-bloom.jp のメールアドレスを入力してください");
+    if (!email.endsWith("@b-bloom.jp") && !email.endsWith("@b-noix.jp")) {
+      setAddError("@b-bloom.jp または @b-noix.jp のメールアドレスを入力してください");
       return;
     }
     setAddError("");
@@ -107,7 +107,7 @@ export function ProjectMemberSettings({
         Google Workspace メンバー
       </label>
       <p style={{ fontSize: 11, color: "#94a3b8", margin: "0 0 12px", lineHeight: 1.6 }}>
-        このプロジェクトのアクセス権は、登録した <strong>@b-bloom.jp</strong> のメールアドレスで判定されます。
+        このプロジェクトのアクセス権は、登録した <strong>@b-bloom.jp または @b-noix.jp</strong> のメールアドレスで判定されます。
       </p>
 
       {membersQuery.isError && (
@@ -157,7 +157,7 @@ export function ProjectMemberSettings({
           <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, color: "#6366f1" }}>メンバーを追加</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1.35fr", gap: 6, marginBottom: 6 }}>
             <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="表示名" style={S.input} />
-            <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="name@b-bloom.jp" style={S.input} />
+            <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="name@b-bloom.jp または name@b-noix.jp" style={S.input} />
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <select value={newRole} onChange={(e) => setNewRole(e.target.value as "viewer" | "editor")}

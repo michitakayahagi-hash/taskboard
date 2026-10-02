@@ -4,6 +4,7 @@ import type { Express, Request, Response } from "express";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
+import { getGoogleHostedDomainHint, isAllowedGoogleWorkspaceEmail } from "./googleDomainPolicy";
 
 const GOOGLE_SESSION_COOKIE = "tb_google_session";
 const GOOGLE_STATE_COOKIE = "tb_google_oauth_state";
@@ -84,7 +85,7 @@ export function registerGoogleAuthRoutes(app: Express) {
     try {
       const clientId = getRequiredEnv("GOOGLE_CLIENT_ID");
       const redirectUri = getRequiredEnv("GOOGLE_OAUTH_REDIRECT_URI");
-      const allowedDomain = (process.env.GOOGLE_ALLOWED_DOMAIN || "b-bloom.jp").trim().toLowerCase();
+      const hostedDomainHint = getGoogleHostedDomainHint();
       const returnTo = isSafeReturnTo(req.query.next) ? req.query.next : "/";
       const state = randomBytes(32).toString("base64url");
 
@@ -100,7 +101,8 @@ export function registerGoogleAuthRoutes(app: Express) {
       url.searchParams.set("response_type", "code");
       url.searchParams.set("scope", "openid email profile");
       url.searchParams.set("state", state);
-      url.searchParams.set("hd", allowedDomain);
+      // Google OAuthのhdは単一ドメイン専用。複数許可時は省略し、コールバックで署名済みIDトークンのメールドメインを厳密に確認する。
+      if (hostedDomainHint) url.searchParams.set("hd", hostedDomainHint);
       url.searchParams.set("prompt", "select_account");
       res.redirect(302, url.toString());
     } catch (error) {
@@ -124,7 +126,6 @@ export function registerGoogleAuthRoutes(app: Express) {
       const clientId = getRequiredEnv("GOOGLE_CLIENT_ID");
       const clientSecret = getRequiredEnv("GOOGLE_CLIENT_SECRET");
       const redirectUri = getRequiredEnv("GOOGLE_OAUTH_REDIRECT_URI");
-      const allowedDomain = (process.env.GOOGLE_ALLOWED_DOMAIN || "b-bloom.jp").trim().toLowerCase();
 
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -148,8 +149,7 @@ export function registerGoogleAuthRoutes(app: Express) {
       });
       const email = typeof payload.email === "string" ? payload.email.toLowerCase() : "";
       const emailVerified = payload.email_verified === true || payload.email_verified === "true";
-      const domainSuffix = `@${allowedDomain}`;
-      if (!payload.sub || !emailVerified || !email.endsWith(domainSuffix)) {
+      if (!payload.sub || !emailVerified || !isAllowedGoogleWorkspaceEmail(email)) {
         res.redirect(302, "/login?error=domain");
         return;
       }

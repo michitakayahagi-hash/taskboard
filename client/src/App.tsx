@@ -13,7 +13,7 @@ function LoginPage() {
   const error = params.get("error");
   const returnTo = params.get("next")?.startsWith("/") ? params.get("next")! : "/";
   const errorText = error === "domain"
-    ? "@b-bloom.jp のGoogle Workspaceアカウントでログインしてください。"
+    ? "@b-bloom.jp または @b-noix.jp のGoogle Workspaceアカウントでログインしてください。"
     : error === "configuration"
     ? "Googleログインの設定を確認してください。"
     : error === "state" || error === "authentication"
@@ -25,7 +25,7 @@ function LoginPage() {
       <main style={{ width: "100%", maxWidth: 430, background: "#fff", borderRadius: 20, padding: "38px 32px", boxShadow: "0 20px 60px rgba(79, 70, 229, .18)", textAlign: "center" }}>
         <div style={{ width: 50, height: 50, borderRadius: 14, background: "#6366f1", color: "#fff", margin: "0 auto 16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800 }}>T</div>
         <h1 style={{ margin: "0 0 8px", fontSize: 22, color: "#1e1b4b" }}>TaskBoard</h1>
-        <p style={{ margin: "0 0 24px", fontSize: 13, color: "#64748b", lineHeight: 1.8 }}>@b-bloom.jp のGoogle Workspaceアカウントでログインしてください。</p>
+        <p style={{ margin: "0 0 24px", fontSize: 13, color: "#64748b", lineHeight: 1.8 }}>@b-bloom.jp または @b-noix.jp のGoogle Workspaceアカウントでログインしてください。</p>
         {errorText && <p style={{ margin: "0 0 16px", padding: "9px 12px", background: "#fff5f5", color: "#dc2626", borderRadius: 8, fontSize: 12, lineHeight: 1.6 }}>{errorText}</p>}
         <button
           type="button"

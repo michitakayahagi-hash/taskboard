@@ -11,6 +11,7 @@ const db = {
   approveDueChangeRequest: vi.fn(),
   rejectDueChangeRequest: vi.fn(),
   getProjectById: vi.fn(),
+  getMemberByEmailAndProject: vi.fn(),
   getSetting: vi.fn(),
 };
 
@@ -56,6 +57,8 @@ describe("due change approval routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db.getTaskById.mockResolvedValue(existingTask);
+    db.getProjectById.mockResolvedValue({ id: "project-1", isPublic: true });
+    db.getMemberByEmailAndProject.mockResolvedValue(null);
     db.getSetting.mockResolvedValue(null);
   });
 
@@ -92,6 +95,16 @@ describe("due change approval routes", () => {
       requestedDue: "2026-10-10",
       requesterEmail: "member@b-bloom.jp",
     }));
+  });
+
+  it("blocks a non-member from changing a deadline in a restricted project", async () => {
+    db.getProjectById.mockResolvedValue({ id: "project-1", isPublic: false });
+    const caller = appRouter.createCaller(createContext("unregistered@b-noix.jp"));
+
+    await expect(caller.dueChange.request({ taskId: "task-1", due: "2026-10-12" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.updateTask).not.toHaveBeenCalled();
   });
 
   it("allows only Michitaka Yahagi to approve a queued change", async () => {
