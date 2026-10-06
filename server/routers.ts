@@ -49,7 +49,7 @@ function formatDeadline(value?: string | null) {
 async function notifyDeadlineApproval(
   task: { id: string; projectId: string; title: string },
   request: { prevDue?: string | null; prevDueStart?: string | null; requestedDue?: string | null; requestedDueStart?: string | null; requesterName: string },
-  event: "requested" | "applied" | "approved" | "rejected",
+  event: "requested" | "requested_updated" | "applied" | "approved" | "rejected",
   approverName?: string
 ) {
   try {
@@ -58,6 +58,8 @@ async function notifyDeadlineApproval(
     const taskUrl = `${TASKBOARD_PUBLIC_URL}/?project=${task.projectId}&task=${task.id}`;
     const heading = event === "requested"
       ? "🕒 *期日変更の承認依頼*"
+      : event === "requested_updated"
+      ? "✏️ *期日変更の申請内容が更新されました*"
       : event === "applied"
       ? "📅 *期日が変更されました*"
       : event === "approved"
@@ -69,7 +71,7 @@ async function notifyDeadlineApproval(
       `現在: ${formatDeadline(request.prevDueStart)} ～ ${formatDeadline(request.prevDue)}`,
       `変更案: ${formatDeadline(request.requestedDueStart)} ～ ${formatDeadline(request.requestedDue)}`,
       `申請者: ${request.requesterName}`,
-      event === "requested" ? "矢作充隆さんの承認待ちです。" : event === "applied" ? "初回変更のため即時反映しました。" : `承認者: ${approverName || "矢作充隆"}`,
+      event === "requested" || event === "requested_updated" ? "矢作充隆さんの承認待ちです。" : event === "applied" ? "初回変更のため即時反映しました。" : `承認者: ${approverName || "矢作充隆"}`,
     ];
     void fetch(webhookUrl, {
       method: "POST",
@@ -576,6 +578,17 @@ export const appRouter = router({
 
         const pending = await db.getPendingDueChangeRequest(input.taskId);
         if (pending) {
+          if (pending.requesterEmail.trim().toLowerCase() === requesterEmail) {
+            await db.updatePendingDueChangeRequest(pending.id, {
+              requestedDue,
+              requestedDueStart,
+              requesterEmail,
+              requesterName,
+            });
+            const updated = await db.getPendingDueChangeRequest(input.taskId);
+            if (updated) await notifyDeadlineApproval(task, updated, "requested_updated");
+            return { status: "pending_updated" as const, requestId: pending.id };
+          }
           return { status: "already_pending" as const, requestId: pending.id };
         }
         await db.createDueChangeRequest({

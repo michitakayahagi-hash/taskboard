@@ -7,6 +7,7 @@ const db = {
   addDueHistory: vi.fn(),
   getPendingDueChangeRequest: vi.fn(),
   createDueChangeRequest: vi.fn(),
+  updatePendingDueChangeRequest: vi.fn(),
   listPendingDueChangeRequests: vi.fn(),
   approveDueChangeRequest: vi.fn(),
   rejectDueChangeRequest: vi.fn(),
@@ -93,6 +94,24 @@ describe("due change approval routes", () => {
       prevDueStart: "2026-10-01",
       requestedDueStart: "2026-10-02",
       requestedDue: "2026-10-10",
+      requesterEmail: "member@b-bloom.jp",
+    }));
+  });
+
+  it("allows the requester to revise a pending deadline proposal without bypassing approval", async () => {
+    db.getDueHistory.mockResolvedValue([{ id: 1 }]);
+    db.getPendingDueChangeRequest
+      .mockResolvedValueOnce({ id: 9, taskId: "task-1", requesterEmail: "member@b-bloom.jp", requesterName: "テスト利用者" })
+      .mockResolvedValueOnce({ id: 9, taskId: "task-1", requesterEmail: "member@b-bloom.jp", requesterName: "テスト利用者", requestedDue: "2026-10-14", requestedDueStart: "2026-10-03" });
+    const caller = appRouter.createCaller(createContext("member@b-bloom.jp"));
+
+    await expect(caller.dueChange.request({ taskId: "task-1", due: "2026-10-14", dueStart: "2026-10-03" }))
+      .resolves.toEqual({ status: "pending_updated", requestId: 9 });
+
+    expect(db.updateTask).not.toHaveBeenCalled();
+    expect(db.updatePendingDueChangeRequest).toHaveBeenCalledWith(9, expect.objectContaining({
+      requestedDue: "2026-10-14",
+      requestedDueStart: "2026-10-03",
       requesterEmail: "member@b-bloom.jp",
     }));
   });

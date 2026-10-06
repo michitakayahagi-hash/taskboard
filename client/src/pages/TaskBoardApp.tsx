@@ -60,7 +60,7 @@ interface Subtask { id: number; text: string; done: boolean; assignee?: string; 
 interface CommentType { id?: number; author: string; text: string; createdAt?: Date | string; }
 interface TaskType {
   id: string; colId: string; sortOrder: number; title: string; assignee: string;
-  priority: string; due: string | null; tags: string[]; subtasks: Subtask[];
+  priority: string; due: string | null; dueStart?: string | null; tags: string[]; subtasks: Subtask[];
   description: string | null; prevCol?: string | null; projectId: string;
   createdBy?: string | null; createdAt?: string | Date | null; taskStatus?: string | null;
 }
@@ -315,6 +315,20 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
   const [tab, setTab] = useState<"subtasks" | "comments" | "attachments" | "dueHistory">("subtasks");
   const dueHistoryQuery = trpc.dueHistory.list.useQuery({ taskId: task.id }, { enabled: tab === "dueHistory" });
   const pendingDueChangeQuery = trpc.dueChange.getPending.useQuery({ taskId: task.id });
+  const utils = trpc.useUtils();
+  const approvePendingDueChange = trpc.dueChange.approve.useMutation({
+    onSuccess: async () => {
+      await pendingDueChangeQuery.refetch();
+      await utils.task.list.invalidate({ projectId });
+      await dueHistoryQuery.refetch();
+    },
+  });
+  const rejectPendingDueChange = trpc.dueChange.reject.useMutation({
+    onSuccess: async () => {
+      await pendingDueChangeQuery.refetch();
+      await utils.task.list.invalidate({ projectId });
+    },
+  });
   const [newSub, setNewSub] = useState("");
   const [editingSubId, setEditingSubId] = useState<number | null>(null);
   const [editingSubText, setEditingSubText] = useState("");
@@ -555,8 +569,15 @@ function TaskDetailModal({ task, cols, webhookUrl, members, projectId, onClose, 
             </div>
             {pendingDueChangeQuery.data?.request && (
               <div style={{ marginTop: 7, borderRadius: 8, padding: "7px 9px", background: "#fffbeb", border: "1px solid #fcd34d", color: "#92400e", fontSize: 11, lineHeight: 1.55 }}>
-                🕒 期日変更を申請中です。矢作充隆さんの承認後に反映されます。<br />
+                🕒 期日変更を申請中です。承認前は元の日付のまま表示されます。<br />
                 変更案: {(pendingDueChangeQuery.data.request.requestedDueStart || "なし").replace(/-/g, "/")} ～ {(pendingDueChangeQuery.data.request.requestedDue || "なし").replace(/-/g, "/")}
+                <div style={{ marginTop: 5, color: "#a16207" }}>同じ申請者は、日付を選び直して申請内容を更新できます。</div>
+                {pendingDueChangeQuery.data.canApprove && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
+                    <button disabled={approvePendingDueChange.isPending || rejectPendingDueChange.isPending} onClick={() => { if (window.confirm(`「${task.title}」の期日変更を却下しますか？`)) rejectPendingDueChange.mutate({ id: pendingDueChangeQuery.data!.request!.id }); }} style={{ border: "1px solid #fca5a5", background: "#fff", color: "#dc2626", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit" }}>却下</button>
+                    <button disabled={approvePendingDueChange.isPending || rejectPendingDueChange.isPending} onClick={() => { if (window.confirm(`「${task.title}」の期日を変更案どおりに反映しますか？`)) approvePendingDueChange.mutate({ id: pendingDueChangeQuery.data!.request!.id }); }} style={{ border: "none", background: "#15803d", color: "#fff", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11, fontWeight: 800, fontFamily: "inherit" }}>承認して反映</button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1885,6 +1906,8 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
               alert("初回の期日変更として反映しました。次回以降の変更は矢作充隆さんの承認後に反映されます。");
             } else if (result.status === "pending") {
               alert("期日変更を承認待ちとして申請しました。矢作充隆さんの承認後に反映されます。");
+            } else if (result.status === "pending_updated") {
+              alert("承認待ちの期日変更案を更新しました。矢作充隆さんの承認後に反映されます。");
             } else if (result.status === "already_pending") {
               alert("このタスクには承認待ちの期日変更がすでにあります。承認または却下後に再申請してください。");
             }

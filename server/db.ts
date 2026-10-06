@@ -318,6 +318,16 @@ export async function createDueChangeRequest(data: InsertDueChangeRequest) {
   await db.insert(dueChangeRequests).values(data);
 }
 
+export async function updatePendingDueChangeRequest(
+  id: number,
+  data: Pick<InsertDueChangeRequest, "requestedDue" | "requestedDueStart" | "requesterEmail" | "requesterName">
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(dueChangeRequests).set(data)
+    .where(and(eq(dueChangeRequests.id, id), eq(dueChangeRequests.status, "pending")));
+}
+
 export async function listPendingDueChangeRequests() {
   const db = await getDb();
   if (!db) return [];
