@@ -17,6 +17,13 @@ type Announcement = {
 // ─── お知らせデータ（新機能追加時にここに追記する） ───────────────────────
 export const ANNOUNCEMENTS: Announcement[] = [
   {
+    id: "2026-10-06-overdue-deadline-change",
+    date: "2026/10/06",
+    title: "📅 期限超過タスクでも、期日変更を申請できるようになりました",
+    body: "期限超過のタスクも、詳細画面の開始日・終了日から期日変更を申請できます。2回目以降の変更は従来どおり矢作充隆さんの承認後に反映されます。承認待ち中は元の日付のまま表示されますが、同じ申請者なら日付を選び直して申請内容を更新できます。矢作さんは対象タスクの詳細画面から直接「承認して反映」または「却下」を選べます。",
+    slideUrl: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663307910496/vUshLaKHKiMpzXrl.pdf",
+  },
+  {
     id: "2026-09-30-hold-status-notification",
     date: "2026/09/30",
     title: "⏸️ 保留中は、すべての期限通知を停止するようになりました",
