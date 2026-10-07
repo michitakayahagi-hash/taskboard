@@ -1116,9 +1116,11 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
   const [tagInput, setTagInput] = useState("");
   const [createdBySelected, setCreatedBySelected] = useState("");
   const [creatorError, setCreatorError] = useState(false);
+  const [assigneeError, setAssigneeError] = useState(false);
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const addTag = () => { if (tagInput.trim() && !form.tags.includes(tagInput.trim())) { set("tags", [...form.tags, tagInput.trim()]); setTagInput(""); } };
-  const combinedAssignee = assignee2 ? `${form.assignee},${assignee2}` : form.assignee;
+  const combinedAssignee = [form.assignee, assignee2].filter(Boolean).join(",");
+  const canSave = Boolean(form.title.trim() && combinedAssignee.trim() && createdBySelected);
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,10,40,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(3px)", padding: 16 }}
       onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -1146,10 +1148,10 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
             </div>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>担当者</label>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: assigneeError ? "#ef4444" : "#6366f1", marginBottom: 4 }}>担当者 <span style={{ color: "#ef4444" }}>*</span></label>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              <select value={form.assignee} onChange={(e) => set("assignee", e.target.value)} style={{ border: "2px solid #e0e7ff", borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", background: "#fff" }}>
-                <option value="">担当なし</option>
+              <select value={form.assignee} onChange={(e) => { set("assignee", e.target.value); setAssigneeError(false); }} style={{ border: `2px solid ${assigneeError ? "#ef4444" : form.assignee ? "#6366f1" : "#e0e7ff"}`, borderRadius: 10, padding: "8px 9px", fontSize: 12, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: form.assignee ? "#1e1b4b" : "#94a3b8", background: assigneeError ? "#fff5f5" : "#fff" }}>
+                <option value="">-- 選択してください --</option>
                 {members.map((m: string) => <option key={m}>{m}</option>)}
               </select>
               {assignee2
@@ -1162,6 +1164,7 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
                 : <button onClick={() => setAssignee2(members.find((m) => m !== form.assignee) || members[0] || "")} style={{ fontSize: 12, color: "#6366f1", background: "#ede9fe", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 700 }}>＋ 担当者追加</button>
               }
             </div>
+            {assigneeError && <p style={{ margin: "4px 0 0", fontSize: 11, color: "#ef4444", fontWeight: 700 }}>⚠ 担当者を選択してください</p>}
           </div>
         </div>
         <div style={{ marginBottom: 14 }}>
@@ -1199,9 +1202,10 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
           <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
           <button onClick={() => {
             if (!form.title.trim()) return;
+            if (!combinedAssignee.trim()) { setAssigneeError(true); return; }
             if (!createdBySelected) { setCreatorError(true); return; }
             onSave({ ...form, assignee: combinedAssignee, createdBy: createdBySelected, description: form.description || undefined });
-          }} style={{ background: form.title.trim() && createdBySelected ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: form.title.trim() && createdBySelected ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: form.title.trim() && createdBySelected ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
+          }} style={{ background: canSave ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: canSave ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: canSave ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
         </div>
       </div>
     </div>

@@ -404,7 +404,7 @@ export const appRouter = router({
         projectId: z.string(),
         colId: z.string(),
         title: z.string(),
-        assignee: z.string().default(""),
+        assignee: z.string().trim().min(1, "担当者を選択してください"),
         priority: z.string().default("medium"),
         due: z.string().nullable().optional(),
         dueStart: z.string().nullable().optional(),
@@ -425,7 +425,7 @@ export const appRouter = router({
         id: z.string(),
         colId: z.string().optional(),
         title: z.string().optional(),
-        assignee: z.string().optional(),
+        assignee: z.string().trim().min(1, "担当者を選択してください").optional(),
         priority: z.string().optional(),
         due: z.string().nullable().optional(),
         dueStart: z.string().nullable().optional(),
@@ -711,8 +711,22 @@ export const appRouter = router({
         const checklistItemIdx = headers.indexOf("アイテム名");
         const checklistDoneIdx = headers.indexOf("アイテム完了フラグ");
 
-        if (listIdx === -1 || taskIdx === -1) {
-          throw new Error("必須カラム（リスト名*, タスク名*）が見つかりません");
+        if (listIdx === -1 || taskIdx === -1 || assigneeIdx === -1) {
+          throw new Error("必須カラム（リスト名*, タスク名*, タスク担当者）が見つかりません");
+        }
+
+        // プロジェクトを作成する前に、担当者未選択のタスクがないことを確認する。
+        const tasksWithoutAssignee = lines.slice(1)
+          .filter((row) => (row[taskIdx] || "").trim())
+          .map((row) => ({
+            title: (row[taskIdx] || "").trim(),
+            assignee: (row[assigneeIdx] || "").replace(/^"|"$/g, "").trim(),
+          }))
+          .filter((task) => !task.assignee);
+        if (tasksWithoutAssignee.length > 0) {
+          const titles = tasksWithoutAssignee.slice(0, 3).map((task) => task.title).join("、");
+          const suffix = tasksWithoutAssignee.length > 3 ? " ほか" : "";
+          throw new Error(`担当者が未選択のタスクがあります（${titles}${suffix}）。CSVで「タスク担当者」を入力してください`);
         }
 
         // Create project
