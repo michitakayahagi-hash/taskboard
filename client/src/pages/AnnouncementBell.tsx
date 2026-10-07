@@ -17,6 +17,13 @@ type Announcement = {
 // ─── お知らせデータ（新機能追加時にここに追記する） ───────────────────────
 export const ANNOUNCEMENTS: Announcement[] = [
   {
+    id: "2026-10-07-task-assignee-required",
+    date: "2026/10/07",
+    title: "👤 タスク担当者が必須入力になりました",
+    body: "新しいタスクは、担当者を1名以上選択しないと作成できなくなりました。担当者を未選択へ戻す操作もできません。CSV取込では、担当者列がない・担当者未入力のタスクがある場合、プロジェクトを作成する前に取込を中止してお知らせします。既存の担当者未選択タスクは、自動では変更していません。",
+    slideUrl: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663307910496/pQqGjspxoWUQKXoA.pdf",
+  },
+  {
     id: "2026-10-06-overdue-deadline-change",
     date: "2026/10/06",
     title: "📅 期限超過タスクでも、期日変更を申請できるようになりました",
