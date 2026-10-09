@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Express, Request, Response } from "express";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { getGoogleUserFromRequest } from "./googleAuth";
 import { getSessionCookieOptions } from "./cookies";
 
@@ -7,10 +8,11 @@ const CHAT_OAUTH_STATE_COOKIE = "tb_google_chat_mentions_state";
 const STATE_TTL_MS = 10 * 60 * 1000;
 const GOOGLE_CHAT_MESSAGES_SCOPE = "https://www.googleapis.com/auth/chat.messages.create";
 const APP_BASE_URL = "https://proactive-caring-production-1be5.up.railway.app";
+const GOOGLE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 
 type ChatMentionOAuthState = {
   state: string;
-  ownerEmail: string;
+  ownerEmail?: string;
   returnTo: string;
 };
 
@@ -112,7 +114,7 @@ function readState(req: Request): ChatMentionOAuthState | null {
   if (!raw || typeof raw !== "string") return null;
   try {
     const state = JSON.parse(raw) as ChatMentionOAuthState;
-    if (!state.state || !state.ownerEmail || !safeReturnTo(state.returnTo)) return null;
+    if (!state.state || !safeReturnTo(state.returnTo)) return null;
     return state;
   } catch {
     return null;
@@ -286,7 +288,7 @@ export function registerGoogleChatMentionRoutes(app: Express) {
   app.get("/api/google-chat-mentions/login", async (req: Request, res: Response) => {
     try {
       const user = await getGoogleUserFromRequest(req);
-      if (!user?.email || !isTaskBoardSuperAdmin(user.email)) {
+      if (user?.email && !isTaskBoardSuperAdmin(user.email)) {
         res.redirect(302, "/?chatMentions=forbidden");
         return;
       }
@@ -294,7 +296,7 @@ export function registerGoogleChatMentionRoutes(app: Express) {
       const returnTo = safeReturnTo(req.query.next) ? req.query.next : "/?chatMentions=connected";
       res.cookie(CHAT_OAUTH_STATE_COOKIE, JSON.stringify({
         state,
-        ownerEmail: user.email.toLowerCase(),
+        ownerEmail: user?.email?.toLowerCase(),
         returnTo,
       } satisfies ChatMentionOAuthState), {
         ...getSessionCookieOptions(req),
@@ -329,9 +331,6 @@ export function registerGoogleChatMentionRoutes(app: Express) {
 
     try {
       const signedInUser = await getGoogleUserFromRequest(req);
-      if (!signedInUser?.email || signedInUser.email.toLowerCase() !== savedState.ownerEmail || !isTaskBoardSuperAdmin(signedInUser.email)) {
-        throw new Error("Signed-in administrator does not match the authorization request");
-      }
       const response = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -344,14 +343,29 @@ export function registerGoogleChatMentionRoutes(app: Express) {
         }),
       });
       if (!response.ok) throw new Error(`Google Chat token exchange failed: ${response.status}`);
-      const token = await response.json() as { refresh_token?: string };
-      if (!token.refresh_token) throw new Error("Google Chat access was not granted");
+      const token = await response.json() as { id_token?: string; refresh_token?: string };
+      if (!token.id_token || !token.refresh_token) throw new Error("Google Chat access was not granted");
+      const { payload } = await jwtVerify(token.id_token, GOOGLE_JWKS, {
+        audience: requiredEnv("GOOGLE_CLIENT_ID"),
+        issuer: ["https://accounts.google.com", "accounts.google.com"],
+      });
+      const authorizedEmail = typeof payload.email === "string" ? payload.email.toLowerCase() : "";
+      const emailVerified = payload.email_verified === true || payload.email_verified === "true";
+      if (!emailVerified || !isTaskBoardSuperAdmin(authorizedEmail)) {
+        throw new Error("Only a configured TaskBoard administrator can authorize Google Chat mentions");
+      }
+      if (savedState.ownerEmail && savedState.ownerEmail !== authorizedEmail) {
+        throw new Error("Signed-in administrator does not match the authorization request");
+      }
+      if (signedInUser?.email && signedInUser.email.toLowerCase() !== authorizedEmail) {
+        throw new Error("TaskBoard session does not match the Google authorization account");
+      }
 
       const conn = await getConnection();
       try {
         await conn.execute(
           "INSERT INTO google_chat_mention_connections (ownerEmail, encryptedRefreshToken, enabled) VALUES (?, ?, TRUE) ON DUPLICATE KEY UPDATE encryptedRefreshToken = VALUES(encryptedRefreshToken), enabled = TRUE, updatedAt = CURRENT_TIMESTAMP",
-          [savedState.ownerEmail, encryptSecret(token.refresh_token)],
+          [authorizedEmail, encryptSecret(token.refresh_token)],
         );
       } finally {
         await conn.end();
