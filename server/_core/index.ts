@@ -7,6 +7,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerGoogleAuthRoutes } from "./googleAuth";
 import { registerGeminiSyncRoutes, renewGeminiSyncWatches } from "./geminiSync";
+import { createGoogleChatMentionResolver, registerGoogleChatMentionRoutes, sendGoogleChatDeadlineMessage } from "./googleChatMentions";
 import { getDueNotificationPlan, getJstDate, isJapaneseBusinessDay } from "./businessCalendar";
 import { isNotificationExcludedTaskStatus, NOTIFICATION_EXCLUDED_TASK_STATUS } from "./notificationStatus";
 import { appRouter } from "../routers";
@@ -227,6 +228,23 @@ async function runMigrations() {
   } catch (err) {
     console.error("[DB] gemini sync tables error:", err);
   }
+  // Google Chat APIで送る担当者メンション用の、管理者認可トークンを暗号化して保持する。
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await (mysql2 as any).createConnection(process.env.DATABASE_URL);
+    await conn.execute(`CREATE TABLE IF NOT EXISTS google_chat_mention_connections (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      ownerEmail VARCHAR(320) NOT NULL UNIQUE,
+      encryptedRefreshToken TEXT NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )`);
+    console.log("[DB] google chat mention connections table ensured");
+    await conn.end();
+  } catch (err) {
+    console.error("[DB] google chat mention connections table error:", err);
+  }
 }
 
 async function trimDoneTasksOnStartup() {
@@ -294,6 +312,7 @@ async function startServer() {
   registerOAuthRoutes(app);
   registerGoogleAuthRoutes(app);
   registerGeminiSyncRoutes(app);
+  registerGoogleChatMentionRoutes(app);
   // Google Chat Webhook プロキシ
   app.post("/api/gchat-send", async (req, res) => {
     const { webhookUrl, text } = req.body as { webhookUrl: string; text: string };
@@ -431,40 +450,39 @@ async function sendOverdueNotifications() {
       const ptasksOverdue = overdueByProject[pid] || [];
       const ptasksNoDue = noDueByProject[pid] || [];
       const projectName = (ptasksOverdue[0] || ptasksNoDue[0])?.projectName || pid;
+      const mentionAssignee = await createGoogleChatMentionResolver(pid, ptasksOverdue.map((task: any) => task.assignee));
 
-      const lines: string[] = [
-        `🚨 *タスク確認通知* （${jstToday}時点）`,
-        `📁 *${projectName}*`,
-        "",
-      ];
+      const buildLines = (format: (assignee?: string | null) => string) => {
+        const lines: string[] = [
+          `🚨 *タスク確認通知* （${jstToday}時点）`,
+          `📁 *${projectName}*`,
+          "",
+        ];
 
-      if (ptasksOverdue.length > 0) {
-        lines.push(`⚠️ *期限超過: ${ptasksOverdue.length}件*`);
-        for (const t of ptasksOverdue) {
-          lines.push(`📋 ${t.title}`);
-          const assigneeDisplay = t.assignee ? t.assignee.split(",").map((a: string) => a.trim()).filter(Boolean).join(" & ") : "担当未設定";
-          lines.push(`  🗂 ${t.colTitle || "不明"} ｜ 👤 ${assigneeDisplay} ｜ 📅 ${t.due}`);
+        if (ptasksOverdue.length > 0) {
+          lines.push(`⚠️ *期限超過: ${ptasksOverdue.length}件*`);
+          for (const t of ptasksOverdue) {
+            lines.push(`📋 ${t.title}`);
+            lines.push(`  🗂 ${t.colTitle || "不明"} ｜ 👤 ${format(t.assignee)} ｜ 📅 ${t.due}`);
+          }
+          lines.push("");
         }
-        lines.push("");
-      }
 
-      if (ptasksNoDue.length > 0) {
-        lines.push(`🗓 *期限未設定: ${ptasksNoDue.length}件*`);
-        for (const t of ptasksNoDue) {
-          lines.push(`📋 ${t.title}`);
-          const assigneeDisplay2 = t.assignee ? t.assignee.split(",").map((a: string) => a.trim()).filter(Boolean).join(" & ") : "担当未設定";
-          lines.push(`  🗂 ${t.colTitle || "不明"} ｜ 👤 ${assigneeDisplay2}`);
+        if (ptasksNoDue.length > 0) {
+          lines.push(`🗓 *期限未設定: ${ptasksNoDue.length}件*`);
+          for (const t of ptasksNoDue) {
+            lines.push(`📋 ${t.title}`);
+            lines.push(`  🗂 ${t.colTitle || "不明"} ｜ 👤 ${formatAssignee(t.assignee)}`);
+          }
+          lines.push("");
         }
-        lines.push("");
-      }
+        return lines;
+      };
 
-      const text = lines.join("\n");
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      totalSent += ptasksOverdue.length + ptasksNoDue.length;
+      const fallbackText = buildLines(formatAssignee).join("\n");
+      const text = buildLines(mentionAssignee).join("\n");
+      const result = await sendGoogleChatDeadlineMessage(webhookUrl, text, fallbackText);
+      if (result.delivered) totalSent += ptasksOverdue.length + ptasksNoDue.length;
     }
     console.log(`[Overdue] 期限超過${overdueTasks.length}件・期限未設定${noDueTasks.length}件を通知しました`);
     await conn.end();
@@ -588,43 +606,44 @@ async function sendDueNotifications(kind: DueNotificationKind) {
       const dateLabel = targetDates.length === 1
         ? targetDates[0].replace(/-/g, "/")
         : `${targetDates[0].replace(/-/g, "/")}〜${targetDates[targetDates.length - 1].replace(/-/g, "/")}`;
-      const lines = [
-        isBeforeNonBusinessDays
-          ? "📅 *土日祝・翌営業日分の期限タスク*"
-          : kind === "tomorrow" ? "📅 *明日までのタスク*" : "⏰ *本日までのタスク*",
-        `📁 *${projectName}*`,
-        `期限：${dateLabel}`,
-        "",
-      ];
-      if (isBeforeNonBusinessDays) {
-        lines.push("次の通知対象日が土日祝のため、直前の営業日にまとめてお知らせしています。", "");
-      }
-      if (mainTasks.length > 0) {
-        lines.push(`📋 *タスク（${mainTasks.length}件）*`);
-        for (const item of mainTasks) {
-          const taskUrl = `${APP_BASE_URL}/?project=${item.projectId}&task=${item.id}`;
-          lines.push(`• <${taskUrl}|${item.title}> ｜ 📅 ${item.targetDate.replace(/-/g, "/")} ｜ 👤 ${formatAssignee(item.assignee)} ｜ 🗂 ${item.colTitle}`);
+      const mentionAssignee = await createGoogleChatMentionResolver(projectId, items.map((item) => item.assignee));
+      const buildLines = (format: (assignee?: string | null) => string) => {
+        const lines = [
+          isBeforeNonBusinessDays
+            ? "📅 *土日祝・翌営業日分の期限タスク*"
+            : kind === "tomorrow" ? "📅 *明日までのタスク*" : "⏰ *本日までのタスク*",
+          `📁 *${projectName}*`,
+          `期限：${dateLabel}`,
+          "",
+        ];
+        if (isBeforeNonBusinessDays) {
+          lines.push("次の通知対象日が土日祝のため、直前の営業日にまとめてお知らせしています。", "");
         }
-        lines.push("");
-      }
-      if (subtasks.length > 0) {
-        lines.push(`☑️ *小タスク（${subtasks.length}件）*`);
-        for (const item of subtasks) {
-          const taskUrl = `${APP_BASE_URL}/?project=${item.projectId}&task=${item.id}`;
-          lines.push(`• <${taskUrl}|${item.title}>`);
-          lines.push(`  親タスク：${item.parentTitle} ｜ 📅 ${item.targetDate.replace(/-/g, "/")} ｜ 👤 ${formatAssignee(item.assignee)} ｜ 🗂 ${item.colTitle}`);
+        if (mainTasks.length > 0) {
+          lines.push(`📋 *タスク（${mainTasks.length}件）*`);
+          for (const item of mainTasks) {
+            const taskUrl = `${APP_BASE_URL}/?project=${item.projectId}&task=${item.id}`;
+            lines.push(`• <${taskUrl}|${item.title}> ｜ 📅 ${item.targetDate.replace(/-/g, "/")} ｜ 👤 ${format(item.assignee)} ｜ 🗂 ${item.colTitle}`);
+          }
+          lines.push("");
         }
-        lines.push("");
-      }
-      lines.push("完了した項目は、次回以降の通知から自動で除外されます。");
+        if (subtasks.length > 0) {
+          lines.push(`☑️ *小タスク（${subtasks.length}件）*`);
+          for (const item of subtasks) {
+            const taskUrl = `${APP_BASE_URL}/?project=${item.projectId}&task=${item.id}`;
+            lines.push(`• <${taskUrl}|${item.title}>`);
+            lines.push(`  親タスク：${item.parentTitle} ｜ 📅 ${item.targetDate.replace(/-/g, "/")} ｜ 👤 ${format(item.assignee)} ｜ 🗂 ${item.colTitle}`);
+          }
+          lines.push("");
+        }
+        lines.push("完了した項目は、次回以降の通知から自動で除外されます。");
+        return lines;
+      };
 
-      const response = await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: lines.join("\n") }),
-      });
-      if (response.ok) totalSent += items.length;
-      else console.error(`[DueNotify] ${projectName} への通知に失敗しました:`, response.status);
+      const fallbackText = buildLines(formatAssignee).join("\n");
+      const result = await sendGoogleChatDeadlineMessage(webhookUrl, buildLines(mentionAssignee).join("\n"), fallbackText);
+      if (result.delivered) totalSent += items.length;
+      else console.error(`[DueNotify] ${projectName} への通知に失敗しました`);
     }
     console.log(`[DueNotify] ${kind}：${totalSent}件を通知しました（対象日 ${targetDates.join(", ")}）`);
     await conn.end();

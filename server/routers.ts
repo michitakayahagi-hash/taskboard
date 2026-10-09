@@ -151,7 +151,7 @@ async function assertTaskEditable(user: ProjectAccessUser, taskId: string) {
 }
 
 function getProjectIdFromSettingKey(key: string): string | null {
-  const simpleProjectKey = /^(?:webhook_url|members)_(.+)$/.exec(key);
+  const simpleProjectKey = /^(?:webhook_url|members|assignee_email_map)_(.+)$/.exec(key);
   if (simpleProjectKey?.[1]) return simpleProjectKey[1];
   const statusProjectKey = /^project_(.+)_statuses$/.exec(key);
   return statusProjectKey?.[1] ?? null;

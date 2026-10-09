@@ -1255,8 +1255,12 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isR
   // ステータス管理
   const statusKey = `project_${projectId}_statuses`;
   const statusQuery = trpc.setting.get.useQuery({ key: statusKey });
+  const assigneeEmailMapKey = `assignee_email_map_${projectId}`;
+  const assigneeEmailMapQuery = trpc.setting.get.useQuery({ key: assigneeEmailMapKey });
   const setSetting = trpc.setting.set.useMutation({ onSuccess: () => statusQuery.refetch() });
   const [localStatuses, setLocalStatuses] = useState<string[]>([]);
+  const [assigneeEmails, setAssigneeEmails] = useState<Record<string, string>>({});
+  const [assigneeEmailSaved, setAssigneeEmailSaved] = useState(false);
   const [newStatus, setNewStatus] = useState("");
   const [statusSaved, setStatusSaved] = useState(false);
   useEffect(() => {
@@ -1264,6 +1268,11 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isR
       try { setLocalStatuses(JSON.parse(statusQuery.data.value)); } catch { setLocalStatuses([]); }
     }
   }, [statusQuery.data?.value]);
+  useEffect(() => {
+    if (assigneeEmailMapQuery.data?.value) {
+      try { setAssigneeEmails(JSON.parse(assigneeEmailMapQuery.data.value)); } catch { setAssigneeEmails({}); }
+    }
+  }, [assigneeEmailMapQuery.data?.value]);
   const saveStatuses = () => {
     setSetting.mutate({ key: statusKey, value: JSON.stringify(localStatuses) }, {
       onSuccess: () => { setStatusSaved(true); setTimeout(() => setStatusSaved(false), 2000); }
@@ -1317,6 +1326,19 @@ function SettingsModal({ webhookUrl, members, projectId, currentUserIsAdmin, isR
                 <button onClick={addMember} style={{ background: "#ede9fe", color: "#6366f1", border: "none", borderRadius: 8, padding: "0 12px", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>追加</button>
               </div>
             </div>
+            {currentUserIsAdmin && (
+              <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid #e0e7ff" }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 5 }}>🔔 Google Chat メンション用メール</label>
+                <p style={{ margin: "0 0 8px", fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>期限通知で担当者をメンションするため、表示名とGoogleアカウントのメールを一度だけ対応付けます。空欄の担当者は通常の名前表示になります。</p>
+                {localMembers.map((member) => (
+                  <div key={`mention-${member}`} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.3fr)", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11, fontWeight: 700, color: "#4338ca" }}>{member}</span>
+                    <input type="email" value={assigneeEmails[member] || ""} onChange={(e) => setAssigneeEmails((previous) => ({ ...previous, [member]: e.target.value }))} placeholder="name@example.com" style={{ border: "1.5px solid #e0e7ff", borderRadius: 8, padding: "6px 8px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", minWidth: 0 }} />
+                  </div>
+                ))}
+                <button onClick={() => setSetting.mutate({ key: assigneeEmailMapKey, value: JSON.stringify(assigneeEmails) }, { onSuccess: () => { assigneeEmailMapQuery.refetch(); setAssigneeEmailSaved(true); setTimeout(() => setAssigneeEmailSaved(false), 2000); } })} style={{ marginTop: 4, background: "#ede9fe", color: "#6366f1", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer", fontWeight: 800, fontSize: 11, fontFamily: "'Noto Sans JP',sans-serif" }}>{assigneeEmailSaved ? "保存しました" : "メール対応を保存"}</button>
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
               <button onClick={onClose} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif" }}>キャンセル</button>
               <button onClick={() => onSave(url, localMembers)} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: "0 4px 12px rgba(99,102,241,.35)" }}>保存</button>
