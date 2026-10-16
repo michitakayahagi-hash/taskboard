@@ -13,6 +13,7 @@ import { sendInvitationEmail } from "./_core/mailer";
 import { storagePut } from "./storage";
 import { deadlineValuesChanged, isDueChangeApprover, normalizeDueDate } from "./_core/dueChangeApproval";
 import { isAllowedGoogleWorkspaceEmail } from "./_core/googleDomainPolicy";
+import { generateAiSubtaskQuestions, generateAiSubtasks } from "./_core/aiSubtasks";
 
 // Cookie name for project-level auth sessions
 const PROJECT_SESSION_COOKIE = "tb_proj_session";
@@ -373,6 +374,31 @@ export const appRouter = router({
 
   // ─── Tasks ──────────────────────────────────────────────────────────────
   task: router({
+    prepareSubtaskQuestions: publicProcedure
+      .input(z.object({
+        projectId: z.string(),
+        title: z.string().trim().min(1, "タスク名を入力してください").max(200),
+        description: z.string().trim().max(4000).nullable().optional(),
+        assignee: z.string().trim().max(200).nullable().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await assertProjectEditable(ctx.user, input.projectId);
+        const questions = await generateAiSubtaskQuestions(input);
+        return { questions };
+      }),
+    suggestSubtasks: publicProcedure
+      .input(z.object({
+        projectId: z.string(),
+        title: z.string().trim().min(1, "タスク名を入力してください").max(200),
+        description: z.string().trim().max(4000).nullable().optional(),
+        assignee: z.string().trim().max(200).nullable().optional(),
+        answers: z.array(z.string().trim().min(1, "AIの質問すべてに回答してください").max(800)).min(3).max(3),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await assertProjectEditable(ctx.user, input.projectId);
+        const subtasks = await generateAiSubtasks(input);
+        return { subtasks };
+      }),
     list: publicProcedure
       .input(z.object({ projectId: z.string() }))
       .query(async ({ input, ctx }) => {

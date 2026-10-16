@@ -1110,17 +1110,57 @@ function ColumnComp({ col, tasks, draggingId, dropTarget, members, doneColIds, o
 }
 
 // ─── AddTaskModal ─────────────────────────────────────────────────────────────
-function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave }: { defaultCol: string; cols: Col[]; members: string[]; currentUser?: string; onClose: () => void; onSave: (form: { title: string; colId: string; assignee: string; priority: string; due: string; dueStart?: string; tags: string[]; createdBy?: string; description?: string }) => void }) {
+function AddTaskModal({ projectId, defaultCol, cols, members, currentUser, onClose, onSave }: { projectId: string; defaultCol: string; cols: Col[]; members: string[]; currentUser?: string; onClose: () => void; onSave: (form: { title: string; colId: string; assignee: string; priority: string; due: string; dueStart?: string; tags: string[]; subtasks: Subtask[]; createdBy?: string; description?: string }) => void }) {
   const [form, setForm] = useState({ title: "", colId: defaultCol || cols[0]?.id || "", assignee: "", priority: "medium", due: "", dueStart: "", tags: [] as string[], description: "" });
   const [assignee2, setAssignee2] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [createdBySelected, setCreatedBySelected] = useState("");
   const [creatorError, setCreatorError] = useState(false);
   const [assigneeError, setAssigneeError] = useState(false);
+  const [useAiSubtasks, setUseAiSubtasks] = useState(false);
+  const [aiQuestions, setAiQuestions] = useState<Array<{ question: string; answer: string }>>([]);
+  const [suggestedSubtasks, setSuggestedSubtasks] = useState<Array<{ text: string; selected: boolean }>>([]);
+  const [aiInputError, setAiInputError] = useState("");
+  const prepareSubtaskQuestions = trpc.task.prepareSubtaskQuestions.useMutation({
+    onSuccess: ({ questions }) => {
+      setAiQuestions(questions.map((item) => ({ question: item.question, answer: "" })));
+      setSuggestedSubtasks([]);
+      setAiInputError("");
+    },
+  });
+  const suggestSubtasks = trpc.task.suggestSubtasks.useMutation({
+    onSuccess: ({ subtasks }) => {
+      setSuggestedSubtasks(subtasks.map((subtask) => ({ text: subtask.text, selected: true })));
+      setAiInputError("");
+    },
+  });
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const addTag = () => { if (tagInput.trim() && !form.tags.includes(tagInput.trim())) { set("tags", [...form.tags, tagInput.trim()]); setTagInput(""); } };
   const combinedAssignee = [form.assignee, assignee2].filter(Boolean).join(",");
   const canSave = Boolean(form.title.trim() && combinedAssignee.trim() && createdBySelected);
+  const generateQuestions = () => {
+    if (!form.title.trim()) { setAiInputError("先にタスク名を入力してください"); return; }
+    prepareSubtaskQuestions.mutate({
+      projectId,
+      title: form.title.trim(),
+      description: form.description.trim() || null,
+      assignee: combinedAssignee || null,
+    });
+  };
+  const generateSuggestions = () => {
+    if (!form.title.trim()) { setAiInputError("先にタスク名を入力してください"); return; }
+    if (aiQuestions.length !== 3 || aiQuestions.some((item) => !item.answer.trim())) { setAiInputError("AIの質問すべてに回答してください"); return; }
+    suggestSubtasks.mutate({
+      projectId,
+      title: form.title.trim(),
+      description: form.description.trim() || null,
+      assignee: combinedAssignee || null,
+      answers: aiQuestions.map((item) => item.answer.trim()),
+    });
+  };
+  const selectedSubtasks: Subtask[] = useAiSubtasks
+    ? suggestedSubtasks.filter((subtask) => subtask.selected && subtask.text.trim()).map((subtask, index) => ({ id: Date.now() + index, text: subtask.text.trim(), done: false }))
+    : [];
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,10,40,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(3px)", padding: 16 }}
       onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -1174,6 +1214,50 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
             style={{ width: "100%", border: "2px solid #e0e7ff", borderRadius: 10, padding: "9px 11px", fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "'Noto Sans JP',sans-serif", color: "#1e1b4b", resize: "vertical" }}
             onFocus={(e) => (e.target.style.borderColor = "#6366f1")} onBlur={(e) => (e.target.style.borderColor = "#e0e7ff")} />
         </div>
+        <div style={{ marginBottom: 16, padding: "12px", borderRadius: 12, border: `1.5px solid ${useAiSubtasks ? "#a5b4fc" : "#e0e7ff"}`, background: useAiSubtasks ? "#f8f7ff" : "#fff" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: useAiSubtasks ? 10 : 0 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#4338ca" }}>✨ AIと相談して小タスクを作る</div>
+              <div style={{ marginTop: 2, fontSize: 10, color: "#64748b", lineHeight: 1.45 }}>AIが必要な情報を質問し、回答をもとに小タスクを提案します。選んだ項目だけ登録されます。</div>
+            </div>
+            <button type="button" onClick={() => { setUseAiSubtasks((value) => !value); setAiInputError(""); }} style={{ flexShrink: 0, background: useAiSubtasks ? "#6366f1" : "#f1f5f9", color: useAiSubtasks ? "#fff" : "#64748b", border: "none", borderRadius: 20, padding: "6px 11px", cursor: "pointer", fontWeight: 800, fontSize: 11, fontFamily: "'Noto Sans JP',sans-serif" }}>
+              {useAiSubtasks ? "使う" : "使わない"}
+            </button>
+          </div>
+          {useAiSubtasks && (
+            <>
+              <button type="button" onClick={generateQuestions} disabled={prepareSubtaskQuestions.isPending || !form.title.trim()} style={{ width: "100%", background: form.title.trim() && !prepareSubtaskQuestions.isPending ? "#ede9fe" : "#f1f5f9", color: form.title.trim() && !prepareSubtaskQuestions.isPending ? "#5b21b6" : "#94a3b8", border: "1px solid #c4b5fd", borderRadius: 8, padding: "7px 10px", cursor: form.title.trim() && !prepareSubtaskQuestions.isPending ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 11, fontFamily: "'Noto Sans JP',sans-serif" }}>
+                {prepareSubtaskQuestions.isPending ? "質問を考え中..." : aiQuestions.length > 0 ? "質問を作り直す" : "AIに必要な情報を質問してもらう"}
+              </button>
+              {(aiInputError || prepareSubtaskQuestions.error?.message || suggestSubtasks.error?.message) && <p style={{ margin: "7px 0 0", fontSize: 10, color: "#dc2626", fontWeight: 700 }}>{aiInputError || prepareSubtaskQuestions.error?.message || suggestSubtasks.error?.message}</p>}
+              {aiQuestions.length > 0 && (
+                <div style={{ marginTop: 9, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>AIの質問に回答してください</div>
+                  {aiQuestions.map((item, index) => (
+                    <div key={`${index}-${item.question}`}>
+                      <label style={{ display: "block", fontSize: 11, color: "#312e81", fontWeight: 700, lineHeight: 1.45, marginBottom: 4 }}>{index + 1}. {item.question}</label>
+                      <input value={item.answer} onChange={(e) => { setAiQuestions((items) => items.map((question, questionIndex) => questionIndex === index ? { ...question, answer: e.target.value } : question)); setAiInputError(""); }} placeholder="回答を入力..." style={{ width: "100%", boxSizing: "border-box", border: "1px solid #ddd6fe", borderRadius: 7, padding: "6px 8px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#312e81", background: "#fff" }} />
+                    </div>
+                  ))}
+                  <button type="button" onClick={generateSuggestions} disabled={suggestSubtasks.isPending || aiQuestions.some((item) => !item.answer.trim())} style={{ width: "100%", background: !suggestSubtasks.isPending && aiQuestions.every((item) => item.answer.trim()) ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 8, padding: "7px 10px", cursor: !suggestSubtasks.isPending && aiQuestions.every((item) => item.answer.trim()) ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 11, fontFamily: "'Noto Sans JP',sans-serif" }}>
+                    {suggestSubtasks.isPending ? "小タスクを作成中..." : "回答から小タスクを提案してもらう"}
+                  </button>
+                </div>
+              )}
+              {suggestedSubtasks.length > 0 && (
+                <div style={{ marginTop: 9, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>追加する小タスクを選択・編集できます</div>
+                  {suggestedSubtasks.map((subtask, index) => (
+                    <div key={`${index}-${subtask.text}`} style={{ display: "flex", gap: 7, alignItems: "center" }}>
+                      <input type="checkbox" checked={subtask.selected} onChange={(e) => setSuggestedSubtasks((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, selected: e.target.checked } : item))} style={{ accentColor: "#6366f1", flexShrink: 0 }} />
+                      <input value={subtask.text} onChange={(e) => setSuggestedSubtasks((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, text: e.target.value } : item))} style={{ flex: 1, minWidth: 0, border: "1px solid #ddd6fe", borderRadius: 7, padding: "5px 7px", fontSize: 11, outline: "none", fontFamily: "'Noto Sans JP',sans-serif", color: "#312e81", background: subtask.selected ? "#fff" : "#f8fafc" }} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
         <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 4 }}>タグ</label>
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           <input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTag()} placeholder="Enter で追加"
@@ -1204,7 +1288,7 @@ function AddTaskModal({ defaultCol, cols, members, currentUser, onClose, onSave 
             if (!form.title.trim()) return;
             if (!combinedAssignee.trim()) { setAssigneeError(true); return; }
             if (!createdBySelected) { setCreatorError(true); return; }
-            onSave({ ...form, assignee: combinedAssignee, createdBy: createdBySelected, description: form.description || undefined });
+            onSave({ ...form, assignee: combinedAssignee, subtasks: selectedSubtasks, createdBy: createdBySelected, description: form.description || undefined });
           }} style={{ background: canSave ? "#6366f1" : "#c7d2fe", color: "#fff", border: "none", borderRadius: 10, padding: "9px 20px", cursor: canSave ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "'Noto Sans JP',sans-serif", boxShadow: canSave ? "0 4px 12px rgba(99,102,241,.35)" : "none" }}>作成</button>
         </div>
       </div>
@@ -1887,11 +1971,11 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
 
   const onCardClick = useCallback((task: TaskType) => { if (!dragRef.current.moved) setDetailTask(task); dragRef.current.moved = false; }, []);
 
-  const saveTask = (form: { title: string; colId: string; assignee: string; priority: string; due: string; dueStart?: string; tags: string[]; createdBy?: string; description?: string }) => {
+  const saveTask = (form: { title: string; colId: string; assignee: string; priority: string; due: string; dueStart?: string; tags: string[]; subtasks: Subtask[]; createdBy?: string; description?: string }) => {
     // 新規タスクをsortOrder=0で作成し、既存タスクを全て+1ずらして先頭に表示
     const colList = tasks.filter((t) => t.colId === form.colId);
     colList.forEach((t) => { updateTask.mutate({ id: t.id, sortOrder: t.sortOrder + 1 }); });
-    createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, dueStart: form.dueStart || null, tags: form.tags, sortOrder: 0, createdBy: form.createdBy || undefined, description: form.description || undefined });
+    createTask.mutate({ id: uid(), projectId: project.id, colId: form.colId, title: form.title, assignee: form.assignee, priority: form.priority, due: form.due || null, dueStart: form.dueStart || null, tags: form.tags, subtasks: form.subtasks, sortOrder: 0, createdBy: form.createdBy || undefined, description: form.description || undefined });
     // Google Chat通知
     if (webhookUrl) {
       const colName = cols.find((c) => c.id === form.colId)?.title || "";
@@ -2121,7 +2205,7 @@ function BoardViewInner({ project, onBack, canEdit, isRestricted, projectSession
           ))}
         </div>
       )}
-      {modal && <AddTaskModal defaultCol={modal.defaultCol} cols={cols} members={members} currentUser={projectSession?.name || members[0] || ""} onClose={() => setModal(null)} onSave={saveTask} />}
+      {modal && <AddTaskModal projectId={project.id} defaultCol={modal.defaultCol} cols={cols} members={members} currentUser={projectSession?.name || members[0] || ""} onClose={() => setModal(null)} onSave={saveTask} />}
       {detailTask && <TaskDetailModal task={tasks.find((t) => t.id === detailTask.id) || detailTask} cols={cols} webhookUrl={webhookUrl} members={members} projectId={project.id} onClose={() => setDetailTask(null)} onAddComment={onAddComment} onUpdateSubtasks={onUpdateSubtasks} onUpdateDescription={onUpdateDescription} onUpdateField={onUpdateField} onDeleteTask={canEdit ? (id) => deleteTask.mutate({ id }) : undefined} onMoveTask={canEdit ? (id, targetProjectId, targetColId) => { moveTask.mutate({ id, targetProjectId, targetColId }); setDetailTask(null); } : undefined} allProjects={allProjects?.filter(p => p.id !== project.id) || []} onComplete={onComplete} onRevert={onRevert} doneColIds={doneColIds} />}
       {showSettings && <SettingsModal webhookUrl={webhookUrl} members={members} projectId={project.id} currentUserIsAdmin={projectSession?.isAdmin ?? !isRestricted} isRestricted={isRestricted} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
