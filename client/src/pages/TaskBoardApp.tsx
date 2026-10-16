@@ -1147,6 +1147,17 @@ function AddTaskModal({ projectId, defaultCol, cols, members, currentUser, onClo
       assignee: combinedAssignee || null,
     });
   };
+  const toggleAiSubtasks = () => {
+    if (useAiSubtasks) {
+      setUseAiSubtasks(false);
+      setAiInputError("");
+      return;
+    }
+    setUseAiSubtasks(true);
+    setAiInputError("");
+    if (form.title.trim()) generateQuestions();
+    else setAiInputError("タスク名を入力してから「AIを使う」を押すと、AIが質問を始めます");
+  };
   const generateSuggestions = () => {
     if (!form.title.trim()) { setAiInputError("先にタスク名を入力してください"); return; }
     if (aiQuestions.length !== 3 || aiQuestions.some((item) => !item.answer.trim())) { setAiInputError("AIの質問すべてに回答してください"); return; }
@@ -1220,8 +1231,8 @@ function AddTaskModal({ projectId, defaultCol, cols, members, currentUser, onClo
               <div style={{ fontSize: 12, fontWeight: 800, color: "#4338ca" }}>✨ AIと相談して小タスクを作る</div>
               <div style={{ marginTop: 2, fontSize: 10, color: "#64748b", lineHeight: 1.45 }}>AIが必要な情報を質問し、回答をもとに小タスクを提案します。選んだ項目だけ登録されます。</div>
             </div>
-            <button type="button" onClick={() => { setUseAiSubtasks((value) => !value); setAiInputError(""); }} style={{ flexShrink: 0, background: useAiSubtasks ? "#6366f1" : "#f1f5f9", color: useAiSubtasks ? "#fff" : "#64748b", border: "none", borderRadius: 20, padding: "6px 11px", cursor: "pointer", fontWeight: 800, fontSize: 11, fontFamily: "'Noto Sans JP',sans-serif" }}>
-              {useAiSubtasks ? "使う" : "使わない"}
+            <button type="button" onClick={toggleAiSubtasks} style={{ flexShrink: 0, background: useAiSubtasks ? "#f1f5f9" : "#6366f1", color: useAiSubtasks ? "#64748b" : "#fff", border: "none", borderRadius: 20, padding: "6px 11px", cursor: "pointer", fontWeight: 800, fontSize: 11, fontFamily: "'Noto Sans JP',sans-serif" }}>
+              {useAiSubtasks ? "AIを使わない" : "AIを使う"}
             </button>
           </div>
           {useAiSubtasks && (
